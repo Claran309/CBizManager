@@ -6,6 +6,7 @@ $RECYCLE.BIN/
 
 # Editors and IDEs
 .idea/
+.vs/
 *.iml
 *.ipr
 *.iws
@@ -63,6 +64,7 @@ client/app.*.map.json
 
 # Android generated and local files
 client/android/.gradle/
+client/android/.kotlin/
 client/android/local.properties
 client/android/captures/
 client/android/.cxx/
@@ -71,13 +73,7 @@ client/android/**/build/
 
 # Windows generated Flutter files
 client/windows/flutter/ephemeral/
-client/windows/flutter/generated_plugin_registrant.cc
-client/windows/flutter/generated_plugin_registrant.h
-client/windows/flutter/generated_plugins.cmake
 
 # Docker bind-mounted runtime data
 deploy/**/data/
 deploy/**/volumes/
-
-# docs
-docs/甲方
