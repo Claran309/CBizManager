@@ -1,0 +1,83 @@
+# Operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors and IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.fleet/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+
+# Logs, temporary files and coverage
+*.log
+logs/
+tmp/
+temp/
+coverage/
+coverage*.out
+*.coverprofile
+*.prof
+
+# Go backend
+backend/bin/
+backend/dist/
+backend/tmp/
+backend/vendor/
+backend/*.exe
+backend/*.test
+
+# Flutter and Dart
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/.packages
+client/.pub-cache/
+client/.pub/
+client/build/
+client/coverage/
+client/doc/api/
+client/app.*.symbols
+client/app.*.map.json
+
+# Android generated and local files
+client/android/.gradle/
+client/android/local.properties
+client/android/captures/
+client/android/.cxx/
+client/android/.externalNativeBuild/
+client/android/**/build/
+
+# Windows generated Flutter files
+client/windows/flutter/ephemeral/
+client/windows/flutter/generated_plugin_registrant.cc
+client/windows/flutter/generated_plugin_registrant.h
+client/windows/flutter/generated_plugins.cmake
+
+# Docker bind-mounted runtime data
+deploy/**/data/
+deploy/**/volumes/
+
+# docs
+docs/甲方
