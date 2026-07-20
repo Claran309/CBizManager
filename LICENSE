@@ -1,0 +1,55 @@
+PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 Claran
+All rights reserved.
+
+1. OWNERSHIP
+
+This software, including its source code, executable files, database schemas,
+API definitions, design materials, and related documentation, is proprietary.
+Unless otherwise agreed in writing, all copyrights and other intellectual
+property rights are owned by Claran.
+
+2. AUTHORIZED USE
+
+Only individuals or organizations that have received explicit written
+authorization from Claran or the applicable rights holder may install, run,
+or use this software. Use is limited to the business scope, devices,
+organizations, and time period specified in that authorization.
+
+3. RESTRICTIONS
+
+Without prior written permission from the rights holder, you may not:
+
+- Copy, publish, sell, rent, sublicense, or distribute any part of this
+  software;
+- Provide the source code, executable files, database schemas, API
+  definitions, or documentation to any unauthorized third party;
+- Modify, decompile, disassemble, reverse engineer, or create derivative works
+  outside the scope of the written authorization;
+- Remove, conceal, or alter any copyright notice, ownership notice, or license
+  information contained in the software; or
+- Use the software for unlawful purposes or in a manner that infringes the
+  lawful rights of any third party.
+
+4. THIRD-PARTY COMPONENTS
+
+Flutter, Dart, Go, and any other third-party or open-source components included
+with this software remain subject to their respective original licenses. This
+license does not modify or restrict rights lawfully granted under those
+third-party licenses.
+
+5. PRECEDENCE OF WRITTEN AGREEMENTS
+
+The delivery, deployment, use, maintenance, ownership, and licensing scope of
+this software are governed by the applicable project contract, supplemental
+agreement, or other valid written agreement between the relevant parties. If
+such an agreement conflicts with this license, the written agreement prevails.
+
+6. DISCLAIMER
+
+Except as required by applicable law or an express written agreement, this
+software is provided "as is." The rights holder is not liable for losses caused
+by unauthorized use, unauthorized modification, third-party environment
+failures, or failure to follow the applicable deployment and operational
+requirements.
