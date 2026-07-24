@@ -2,7 +2,31 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
 import 'package:c_biz_docs_manager/core/auth/credential_store.dart';
 import 'package:c_biz_docs_manager/core/auth/web_credential_store.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+final class RecordingAuthAdapter implements HttpClientAdapter {
+  final List<RequestOptions> requests = <RequestOptions>[];
+
+  @override
+  void close({bool force = false}) {}
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return ResponseBody.fromString(
+      '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''',
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
+    );
+  }
+}
 
 final class FakeCredentialStore implements CredentialStore {
   String? token;
@@ -43,6 +67,7 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   var nativeRefreshCalls = 0;
   var webRefreshCalls = 0;
   var logoutCalls = 0;
+  Object? logoutError;
   String? receivedRefreshToken;
   TokenResponse response = TokenResponse(
     accessToken: 'access',
@@ -79,6 +104,10 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   @override
   Future<void> logout({required bool web, String? accessToken}) async {
     logoutCalls++;
+    final error = logoutError;
+    if (error != null) {
+      throw error;
+    }
   }
 }
 
@@ -132,6 +161,39 @@ void main() {
   );
 
   test(
+    'Dio auth adapter follows API paths and transport protections',
+    () async {
+      final adapter = RecordingAuthAdapter();
+      final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+        ..httpClientAdapter = adapter;
+      final remote = DioAuthRemoteDataSource(
+        dio,
+        csrfTokenReader: () => 'csrf-token',
+      );
+
+      await remote.loginNative('user', 'password');
+      await remote.refreshWeb();
+      await remote.logout(web: true);
+      await remote.logout(web: false, accessToken: 'native-access');
+
+      expect(adapter.requests.map((request) => request.uri.path), <String>[
+        '/api/v1/auth/login',
+        '/api/v1/auth/web/refresh',
+        '/api/v1/auth/web/logout',
+        '/api/v1/auth/logout',
+      ]);
+      expect(adapter.requests[1].headers['X-CSRF-Token'], 'csrf-token');
+      expect(adapter.requests[2].headers['X-CSRF-Token'], 'csrf-token');
+      expect(adapter.requests[1].extra['withCredentials'], isTrue);
+      expect(adapter.requests[2].extra['withCredentials'], isTrue);
+      expect(
+        adapter.requests[3].headers['Authorization'],
+        'Bearer native-access',
+      );
+    },
+  );
+
+  test(
     'native login fails closed when secure storage rejects the refresh token',
     () async {
       final accessTokens = InMemoryAccessTokenStore();
@@ -151,6 +213,7 @@ void main() {
     'logout clears memory and credential store even when remote fails',
     () async {
       final remote = FakeAuthRemoteDataSource();
+      remote.logoutError = StateError('network unavailable');
       final credentials = FakeCredentialStore()..token = 'refresh';
       final accessTokens = InMemoryAccessTokenStore()..accessToken = 'access';
       final repository = DefaultAuthRepository(
@@ -160,7 +223,7 @@ void main() {
         platform: AuthPlatform.native,
       );
 
-      await repository.logout();
+      await expectLater(repository.logout(), throwsStateError);
       expect(accessTokens.accessToken, isNull);
       expect(credentials.token, isNull);
       expect(remote.logoutCalls, 1);

@@ -10,6 +10,8 @@ final class ControlledAdapter implements HttpClientAdapter {
 
   final bool failRefresh;
   final Map<String, int> calls = <String, int>{};
+  final Map<String, List<String?>> authorizationHeaders =
+      <String, List<String?>>{};
 
   @override
   void close({bool force = false}) {}
@@ -22,6 +24,9 @@ final class ControlledAdapter implements HttpClientAdapter {
   ) async {
     final attempt = (calls[options.path] ?? 0) + 1;
     calls[options.path] = attempt;
+    authorizationHeaders
+        .putIfAbsent(options.path, () => <String?>[])
+        .add(options.headers['Authorization'] as String?);
     if (options.path == '/auth/refresh') {
       return ResponseBody.fromString(
         failRefresh ? '{"code":"AUTH_REFRESH_INVALID"}' : '{"ok":true}',
@@ -74,6 +79,50 @@ void main() {
       expect(adapter.calls['/one'], 2);
       expect(adapter.calls['/two'], 2);
       expect(adapter.calls['/three'], 2);
+      expect(adapter.authorizationHeaders['/one'], <String?>[
+        'Bearer expired',
+        'Bearer fresh',
+      ]);
+      expect(adapter.authorizationHeaders['/two'], <String?>[
+        'Bearer expired',
+        'Bearer fresh',
+      ]);
+      expect(adapter.authorizationHeaders['/three'], <String?>[
+        'Bearer expired',
+        'Bearer fresh',
+      ]);
+    },
+  );
+
+  test(
+    'separate failed refresh flights each clear their session once',
+    () async {
+      final adapter = ControlledAdapter(failRefresh: true);
+      var refreshes = 0;
+      var clears = 0;
+      final client = ApiClient(
+        dio: Dio(BaseOptions(baseUrl: 'https://example.test'))
+          ..httpClientAdapter = adapter,
+        accessTokens: InMemoryAccessTokenStore()..accessToken = 'expired',
+        refreshSession: () async {
+          refreshes++;
+          throw StateError('refresh rejected');
+        },
+        clearSession: () async => clears++,
+      );
+
+      await expectLater(
+        client.dio.get<dynamic>('/first-session'),
+        throwsA(isA<DioException>()),
+      );
+      client.accessTokens.accessToken = 'expired-after-login';
+      await expectLater(
+        client.dio.get<dynamic>('/second-session'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(refreshes, 2);
+      expect(clears, 2);
     },
   );
 

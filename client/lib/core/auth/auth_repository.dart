@@ -1,5 +1,6 @@
 import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/credential_store.dart';
+import 'package:c_biz_docs_manager/core/auth/web_cookie_reader.dart';
 import 'package:c_biz_docs_manager/core/network/api_envelope.dart';
 import 'package:dio/dio.dart';
 
@@ -96,40 +97,75 @@ final class DefaultAuthRepository implements AuthRepository {
 /// Concrete endpoint adapter shared by the repository and application wiring.
 /// It decodes the project's response envelope but never logs credentials.
 final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
-  DioAuthRemoteDataSource(this._dio);
+  DioAuthRemoteDataSource(
+    this._dio, {
+    String csrfCookieName = 'cbiz_csrf',
+    String? Function()? csrfTokenReader,
+  }) : _csrfTokenReader =
+           csrfTokenReader ?? (() => readBrowserCookie(csrfCookieName));
 
   final Dio _dio;
+  final String? Function() _csrfTokenReader;
+
+  static const _apiPrefix = '/api/v1/auth';
 
   @override
   Future<TokenResponse> loginNative(String username, String password) =>
-      _postTokens('/auth/login', <String, Object?>{
+      _postTokens('$_apiPrefix/login', <String, Object?>{
         'username': username,
         'password': password,
       });
 
   @override
   Future<TokenResponse> loginWeb(String username, String password) =>
-      _postTokens('/auth/web/login', <String, Object?>{
+      _postTokens('$_apiPrefix/web/login', <String, Object?>{
         'username': username,
         'password': password,
-      });
+      }, options: _webOptions(requireCSRF: false));
 
   @override
   Future<TokenResponse> refreshNative(String refreshToken) => _postTokens(
-    '/auth/refresh',
+    '$_apiPrefix/refresh',
     <String, Object?>{'refresh_token': refreshToken},
   );
 
   @override
-  Future<TokenResponse> refreshWeb() => _postTokens('/auth/web/refresh', null);
+  Future<TokenResponse> refreshWeb() => _postTokens(
+    '$_apiPrefix/web/refresh',
+    null,
+    options: _webOptions(requireCSRF: true),
+  );
 
   @override
   Future<void> logout({required bool web, String? accessToken}) async {
-    await _dio.post<void>(web ? '/auth/web/logout' : '/auth/logout');
+    if (web) {
+      await _dio.post<void>(
+        '$_apiPrefix/web/logout',
+        options: _webOptions(requireCSRF: true),
+      );
+      return;
+    }
+    if (accessToken == null || accessToken.isEmpty) {
+      throw StateError('Native logout requires an access token');
+    }
+    await _dio.post<void>(
+      '$_apiPrefix/logout',
+      options: Options(
+        headers: <String, Object?>{'Authorization': 'Bearer $accessToken'},
+      ),
+    );
   }
 
-  Future<TokenResponse> _postTokens(String path, Object? body) async {
-    final response = await _dio.post<Object?>(path, data: body);
+  Future<TokenResponse> _postTokens(
+    String path,
+    Object? body, {
+    Options? options,
+  }) async {
+    final response = await _dio.post<Object?>(
+      path,
+      data: body,
+      options: options,
+    );
     final raw = response.data;
     if (raw is! Map) {
       throw const FormatException('Authentication response must be an object');
@@ -158,6 +194,23 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
       refreshToken: data['refresh_token'] as String?,
       accessExpiresAt: _readDate(data['access_expires_at']),
       refreshExpiresAt: _readDate(data['refresh_expires_at']),
+    );
+  }
+
+  Options _webOptions({required bool requireCSRF}) {
+    final headers = <String, Object?>{};
+    if (requireCSRF) {
+      final token = _csrfTokenReader();
+      if (token == null || token.isEmpty) {
+        throw StateError('Web authentication requires a CSRF cookie');
+      }
+      headers['X-CSRF-Token'] = token;
+    }
+    // Dio's browser adapter consumes this per-request flag and sets
+    // XMLHttpRequest.withCredentials, including for the login Set-Cookie.
+    return Options(
+      headers: headers,
+      extra: <String, Object?>{'withCredentials': true},
     );
   }
 

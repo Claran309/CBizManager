@@ -23,7 +23,6 @@ final class ApiClient {
   final Future<AuthSession> Function() refreshSession;
   final Future<void> Function() clearSession;
   Future<AuthSession>? _refreshing;
-  bool _sessionClearedAfterRefreshFailure = false;
 
   bool canRefresh(RequestOptions options) {
     final path = options.path;
@@ -48,13 +47,11 @@ final class ApiClient {
     try {
       final session = await refreshSession();
       accessTokens.accessToken = session.accessToken;
-      _sessionClearedAfterRefreshFailure = false;
       return session;
     } catch (_) {
-      if (!_sessionClearedAfterRefreshFailure) {
-        _sessionClearedAfterRefreshFailure = true;
-        await clearSession();
-      }
+      // Single-flight guarantees this block runs once for the current refresh
+      // wave. A later login starts a new wave and must be cleared independently.
+      await clearSession();
       rethrow;
     } finally {
       _refreshing = null;
@@ -89,6 +86,14 @@ final class _AuthInterceptor extends Interceptor {
     try {
       await _client.refreshOnce();
       options.extra[ApiClient.retriedRequestExtraKey] = true;
+      final token = _client.accessTokens.accessToken;
+      if (token == null || token.isEmpty) {
+        options.headers.remove('Authorization');
+      } else {
+        // The original RequestOptions already contains the expired Bearer.
+        // Replace it before Dio re-enters the request interceptor chain.
+        options.headers['Authorization'] = 'Bearer $token';
+      }
       final response = await _client.dio.fetch<Object?>(options);
       handler.resolve(response);
     } catch (_) {
