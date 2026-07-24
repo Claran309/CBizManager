@@ -185,6 +185,54 @@ func TestMiddlewareCORSUsesConfiguredOriginsWithoutCredentialWildcard(t *testing
 	}
 }
 
+func TestMiddlewareWebOriginUsesExactSchemeHostAndPort(t *testing.T) {
+	cfg := config.WebAuthConfig{Enabled: true, AllowedOrigins: []string{"https://app.example.com", "http://localhost:3000"}}
+	router := gin.New()
+	router.Use(requestid.Middleware(), RequireWebOrigin(cfg))
+	router.POST("/web", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	allowedRequest := httptest.NewRequest(http.MethodPost, "/web", nil)
+	allowedRequest.Header.Set("Origin", "https://app.example.com")
+	allowed := httptest.NewRecorder()
+	router.ServeHTTP(allowed, allowedRequest)
+	if allowed.Code != http.StatusNoContent {
+		t.Fatalf("allowed status=%d body=%s", allowed.Code, allowed.Body.String())
+	}
+
+	for _, origin := range []string{"", "http://app.example.com", "https://app.example.com:444", "https://evil.example"} {
+		request := httptest.NewRequest(http.MethodPost, "/web", nil)
+		request.Header.Set("Origin", origin)
+		writer := httptest.NewRecorder()
+		router.ServeHTTP(writer, request)
+		assertMiddlewareError(t, writer, http.StatusForbidden, apperror.CodeOriginForbidden)
+	}
+}
+
+func TestMiddlewareCSRFRequiresMatchingCookieAndHeader(t *testing.T) {
+	cfg := config.WebAuthConfig{CSRFCookieName: "cbiz_csrf"}
+	router := gin.New()
+	router.Use(requestid.Middleware(), RequireCSRF(cfg))
+	router.POST("/web", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	validRequest := httptest.NewRequest(http.MethodPost, "/web", nil)
+	validRequest.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: "csrf-token"})
+	validRequest.Header.Set("X-CSRF-Token", "csrf-token")
+	valid := httptest.NewRecorder()
+	router.ServeHTTP(valid, validRequest)
+	if valid.Code != http.StatusNoContent {
+		t.Fatalf("valid status=%d body=%s", valid.Code, valid.Body.String())
+	}
+
+	for _, header := range []string{"", "different"} {
+		request := httptest.NewRequest(http.MethodPost, "/web", nil)
+		request.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: "csrf-token"})
+		request.Header.Set("X-CSRF-Token", header)
+		writer := httptest.NewRecorder()
+		router.ServeHTTP(writer, request)
+		assertMiddlewareError(t, writer, http.StatusForbidden, apperror.CodeCSRFInvalid)
+	}
+}
+
 type stubAuthenticator struct {
 	principal *identity.Principal
 	err       error

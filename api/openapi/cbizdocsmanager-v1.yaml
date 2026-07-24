@@ -340,6 +340,8 @@ paths:
       operationId: webLogin
       summary: Web 用户登录并设置 Refresh 与 CSRF Cookie
       security: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
       requestBody:
         required: true
         content:

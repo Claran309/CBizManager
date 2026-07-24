@@ -176,6 +176,26 @@ func TestServiceRefreshRotatesOnceAndLogoutRevokesCurrentSession(t *testing.T) {
 	assertAppErrorCode(t, err, apperror.CodeAuthRefreshInvalid)
 }
 
+func TestServiceLogoutRefreshRevokesCookieSession(t *testing.T) {
+	repo := newFakeIdentityRepository()
+	repo.addUser(User{Username: "web-user", PasswordHash: "hash:secret", DisplayName: "Web", AccountType: AccountTypePlatformAdmin, Status: UserStatusActive}, AccessState{AccountType: AccountTypePlatformAdmin, UserStatus: UserStatusActive})
+	service, _ := newIdentityTestService(t, repo)
+	pair, err := service.Login(context.Background(), LoginRequest{Username: "web-user", Password: "secret"})
+	if err != nil {
+		t.Fatalf("Login() error=%v", err)
+	}
+	if err := service.LogoutRefresh(context.Background(), pair.RefreshToken); err != nil {
+		t.Fatalf("LogoutRefresh() error=%v", err)
+	}
+	_, err = service.Refresh(context.Background(), RefreshRequest{RefreshToken: pair.RefreshToken})
+	assertAppErrorCode(t, err, apperror.CodeAuthRefreshInvalid)
+	if err := service.LogoutRefresh(context.Background(), pair.RefreshToken); err == nil {
+		t.Fatal("second LogoutRefresh() error=nil")
+	} else {
+		assertAppErrorCode(t, err, apperror.CodeAuthRefreshInvalid)
+	}
+}
+
 func TestServiceMeReturnsUserAndGroupSummary(t *testing.T) {
 	repo := newFakeIdentityRepository()
 	groupID := uint64(77)
@@ -366,6 +386,19 @@ func (r *fakeIdentityRepository) RevokeRefreshSession(_ context.Context, userID,
 		}
 	}
 	return ErrRefreshInvalid
+}
+
+func (r *fakeIdentityRepository) RevokeRefreshToken(_ context.Context, tokenHash string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	session, ok := r.sessions[tokenHash]
+	if !ok || session.RevokedAt != nil {
+		return ErrRefreshInvalid
+	}
+	session.RevokedAt = &now
+	session.LastUsedAt = &now
+	r.sessions[tokenHash] = session
+	return nil
 }
 
 func (r *fakeIdentityRepository) ChangePassword(_ context.Context, userID uint64, expectedOldHash, newHash string, _ time.Time) error {

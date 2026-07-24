@@ -29,6 +29,7 @@ type Repository interface {
 	CreateRefreshSession(ctx context.Context, session *RefreshSession) error
 	RotateRefreshSession(ctx context.Context, oldTokenHash string, replacement *RefreshSession, now time.Time) (*RefreshSession, AccessState, error)
 	RevokeRefreshSession(ctx context.Context, userID, sessionID uint64, now time.Time) error
+	RevokeRefreshToken(ctx context.Context, tokenHash string, now time.Time) error
 	ChangePassword(ctx context.Context, userID uint64, expectedOldHash, newHash string, now time.Time) error
 	BootstrapPlatformAdmin(ctx context.Context, admin *User, now time.Time) (bool, error)
 }
@@ -165,6 +166,32 @@ func (r *gormRepository) RevokeRefreshSession(ctx context.Context, userID, sessi
 			return err
 		}
 		return appendAudit(tx, groupID, userID, "identity.session.logged_out", "refresh_session", strconv.FormatUint(sessionID, 10), "用户已退出当前会话", now)
+	})
+}
+
+func (r *gormRepository) RevokeRefreshToken(ctx context.Context, tokenHash string, now time.Time) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		tx = tx.WithContext(ctx)
+		var session RefreshSession
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token_hash = ?", tokenHash).Take(&session).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrRefreshInvalid
+		}
+		if err != nil {
+			return fmt.Errorf("lock refresh session for logout: %w", err)
+		}
+		if session.RevokedAt != nil {
+			return ErrRefreshInvalid
+		}
+		update := tx.Model(&RefreshSession{}).Where("id = ? AND revoked_at IS NULL", session.ID).
+			Updates(map[string]any{"revoked_at": now, "last_used_at": now})
+		if update.Error != nil {
+			return fmt.Errorf("revoke refresh token session: %w", update.Error)
+		}
+		if update.RowsAffected != 1 {
+			return ErrRefreshInvalid
+		}
+		return appendAudit(tx, session.GroupID, session.UserID, "identity.session.logged_out", "refresh_session", strconv.FormatUint(session.ID, 10), "用户已退出当前会话", now)
 	})
 }
 

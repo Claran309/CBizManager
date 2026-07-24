@@ -197,6 +197,30 @@ func TestRepositoryRevokesOnlyOwnedRefreshSession(t *testing.T) {
 	}
 }
 
+func TestRepositoryRevokesRefreshSessionByTokenHash(t *testing.T) {
+	db := openIdentityTestDB(t)
+	repo := NewRepository(db)
+	user, group, _ := seedIdentityGroupUser(t, db, "web-revoke", AccountTypeMember)
+	now := time.Date(2026, 7, 24, 10, 30, 0, 0, time.UTC)
+	session := &RefreshSession{UserID: user.ID, GroupID: &group.ID, TokenHash: "web-revoke-token-hash", ExpiresAt: now.Add(time.Hour), CreatedAt: now}
+	if err := repo.CreateRefreshSession(context.Background(), session); err != nil {
+		t.Fatalf("CreateRefreshSession() error=%v", err)
+	}
+	if err := repo.RevokeRefreshToken(context.Background(), session.TokenHash, now); err != nil {
+		t.Fatalf("RevokeRefreshToken() error=%v", err)
+	}
+	if err := repo.RevokeRefreshToken(context.Background(), session.TokenHash, now); !errors.Is(err, ErrRefreshInvalid) {
+		t.Fatalf("second revoke error=%v", err)
+	}
+	var audit auditLogTest
+	if err := db.Where("action = ?", "identity.session.logged_out").First(&audit).Error; err != nil {
+		t.Fatalf("load audit: %v", err)
+	}
+	if strings.Contains(audit.Summary, session.TokenHash) {
+		t.Fatalf("audit leaked token hash: %q", audit.Summary)
+	}
+}
+
 func TestRepositoryChangesPasswordConditionallyAndAuditsWithoutHashes(t *testing.T) {
 	db := openIdentityTestDB(t)
 	repo := NewRepository(db)

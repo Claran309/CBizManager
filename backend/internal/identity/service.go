@@ -112,6 +112,21 @@ func (s *Service) Logout(ctx context.Context, principal Principal) error {
 	return nil
 }
 
+func (s *Service) LogoutRefresh(ctx context.Context, rawRefreshToken string) error {
+	rawRefreshToken = strings.TrimSpace(rawRefreshToken)
+	if rawRefreshToken == "" {
+		return apperror.ErrAuthRefreshInvalid
+	}
+	err := s.repo.RevokeRefreshToken(ctx, hashRefreshToken(rawRefreshToken), s.now().UTC())
+	if errors.Is(err, ErrRefreshInvalid) {
+		return apperror.ErrAuthRefreshInvalid
+	}
+	if err != nil {
+		return internalServiceError("revoke refresh token", err)
+	}
+	return nil
+}
+
 func (s *Service) Me(ctx context.Context, principal Principal) (*MeResponse, error) {
 	user, err := s.repo.FindUserByID(ctx, principal.UserID)
 	if errors.Is(err, ErrUserNotFound) {

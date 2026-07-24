@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
+	"golang.org/x/net/publicsuffix"
 )
 
 const defaultDevelopmentJWTSecret = "development-only-change-me"
@@ -19,6 +21,7 @@ var (
 	ErrBootstrapAdminUsernameRequired    = errors.New("production 环境必须显式配置 bootstrap 管理员用户名")
 	ErrBootstrapAdminPasswordRequired    = errors.New("production 环境必须显式配置 bootstrap 管理员密码")
 	ErrUnsafeProductionBootstrapPassword = errors.New("production 环境 bootstrap 管理员密码至少 12 字节且不得使用开发默认值")
+	ErrUnsafeProductionWebAuth           = errors.New("Web Cookie 认证配置不满足生产安全要求")
 )
 
 // Config 汇总服务启动所需的全部基础配置。
@@ -29,6 +32,7 @@ type Config struct {
 	Redis     RedisConfig     `mapstructure:"redis"`
 	JWT       JWTConfig       `mapstructure:"jwt"`
 	CORS      CORSConfig      `mapstructure:"cors"`
+	WebAuth   WebAuthConfig   `mapstructure:"web_auth"`
 	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
 }
 
@@ -75,6 +79,15 @@ type CORSConfig struct {
 	AllowedHeaders   []string      `mapstructure:"allowed_headers"`
 	AllowCredentials bool          `mapstructure:"allow_credentials"`
 	MaxAge           time.Duration `mapstructure:"max_age"`
+}
+
+type WebAuthConfig struct {
+	Enabled           bool     `mapstructure:"enabled"`
+	Secure            bool     `mapstructure:"secure"`
+	AllowedOrigins    []string `mapstructure:"allowed_origins"`
+	CookieDomain      string   `mapstructure:"cookie_domain"`
+	RefreshCookieName string   `mapstructure:"refresh_cookie_name"`
+	CSRFCookieName    string   `mapstructure:"csrf_cookie_name"`
 }
 
 type BootstrapConfig struct {
@@ -158,6 +171,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cors.allowed_headers", []string{"Authorization", "Content-Type", "X-Request-ID"})
 	v.SetDefault("cors.allow_credentials", false)
 	v.SetDefault("cors.max_age", 12*time.Hour)
+	v.SetDefault("web_auth.enabled", false)
+	v.SetDefault("web_auth.secure", false)
+	v.SetDefault("web_auth.allowed_origins", []string{"http://localhost:3000", "http://127.0.0.1:3000"})
+	v.SetDefault("web_auth.cookie_domain", "")
+	v.SetDefault("web_auth.refresh_cookie_name", "cbiz_refresh")
+	v.SetDefault("web_auth.csrf_cookie_name", "cbiz_csrf")
 
 	v.SetDefault("bootstrap.admin_username", "admin")
 	v.SetDefault("bootstrap.admin_password", "123456")
@@ -168,35 +187,41 @@ func bindEnvironment(v *viper.Viper) {
 	v.AutomaticEnv()
 
 	bindings := map[string][]string{
-		"app.name":                 {"APP_NAME"},
-		"app.env":                  {"APP_ENV"},
-		"app.log_level":            {"LOG_LEVEL", "APP_LOG_LEVEL"},
-		"http.host":                {"HTTP_HOST"},
-		"http.port":                {"HTTP_PORT"},
-		"http.read_timeout":        {"HTTP_READ_TIMEOUT"},
-		"http.write_timeout":       {"HTTP_WRITE_TIMEOUT"},
-		"http.idle_timeout":        {"HTTP_IDLE_TIMEOUT"},
-		"mysql.dsn":                {"MYSQL_DSN"},
-		"mysql.max_open_conns":     {"MYSQL_MAX_OPEN_CONNS"},
-		"mysql.max_idle_conns":     {"MYSQL_MAX_IDLE_CONNS"},
-		"mysql.conn_max_lifetime":  {"MYSQL_CONN_MAX_LIFETIME"},
-		"redis.addr":               {"REDIS_ADDR"},
-		"redis.password":           {"REDIS_PASSWORD"},
-		"redis.db":                 {"REDIS_DB"},
-		"redis.dial_timeout":       {"REDIS_DIAL_TIMEOUT"},
-		"redis.read_timeout":       {"REDIS_READ_TIMEOUT"},
-		"redis.write_timeout":      {"REDIS_WRITE_TIMEOUT"},
-		"jwt.secret":               {"JWT_SECRET"},
-		"jwt.issuer":               {"JWT_ISSUER"},
-		"jwt.access_ttl":           {"JWT_ACCESS_TTL"},
-		"jwt.refresh_ttl":          {"JWT_REFRESH_TTL"},
-		"cors.allowed_origins":     {"CORS_ALLOWED_ORIGINS"},
-		"cors.allowed_methods":     {"CORS_ALLOWED_METHODS"},
-		"cors.allowed_headers":     {"CORS_ALLOWED_HEADERS"},
-		"cors.allow_credentials":   {"CORS_ALLOW_CREDENTIALS"},
-		"cors.max_age":             {"CORS_MAX_AGE"},
-		"bootstrap.admin_username": {"BOOTSTRAP_ADMIN_USERNAME"},
-		"bootstrap.admin_password": {"BOOTSTRAP_ADMIN_PASSWORD"},
+		"app.name":                     {"APP_NAME"},
+		"app.env":                      {"APP_ENV"},
+		"app.log_level":                {"LOG_LEVEL", "APP_LOG_LEVEL"},
+		"http.host":                    {"HTTP_HOST"},
+		"http.port":                    {"HTTP_PORT"},
+		"http.read_timeout":            {"HTTP_READ_TIMEOUT"},
+		"http.write_timeout":           {"HTTP_WRITE_TIMEOUT"},
+		"http.idle_timeout":            {"HTTP_IDLE_TIMEOUT"},
+		"mysql.dsn":                    {"MYSQL_DSN"},
+		"mysql.max_open_conns":         {"MYSQL_MAX_OPEN_CONNS"},
+		"mysql.max_idle_conns":         {"MYSQL_MAX_IDLE_CONNS"},
+		"mysql.conn_max_lifetime":      {"MYSQL_CONN_MAX_LIFETIME"},
+		"redis.addr":                   {"REDIS_ADDR"},
+		"redis.password":               {"REDIS_PASSWORD"},
+		"redis.db":                     {"REDIS_DB"},
+		"redis.dial_timeout":           {"REDIS_DIAL_TIMEOUT"},
+		"redis.read_timeout":           {"REDIS_READ_TIMEOUT"},
+		"redis.write_timeout":          {"REDIS_WRITE_TIMEOUT"},
+		"jwt.secret":                   {"JWT_SECRET"},
+		"jwt.issuer":                   {"JWT_ISSUER"},
+		"jwt.access_ttl":               {"JWT_ACCESS_TTL"},
+		"jwt.refresh_ttl":              {"JWT_REFRESH_TTL"},
+		"cors.allowed_origins":         {"CORS_ALLOWED_ORIGINS"},
+		"cors.allowed_methods":         {"CORS_ALLOWED_METHODS"},
+		"cors.allowed_headers":         {"CORS_ALLOWED_HEADERS"},
+		"cors.allow_credentials":       {"CORS_ALLOW_CREDENTIALS"},
+		"cors.max_age":                 {"CORS_MAX_AGE"},
+		"web_auth.enabled":             {"WEB_AUTH_ENABLED"},
+		"web_auth.secure":              {"WEB_AUTH_SECURE"},
+		"web_auth.allowed_origins":     {"WEB_AUTH_ALLOWED_ORIGINS"},
+		"web_auth.cookie_domain":       {"WEB_AUTH_COOKIE_DOMAIN"},
+		"web_auth.refresh_cookie_name": {"WEB_AUTH_REFRESH_COOKIE_NAME"},
+		"web_auth.csrf_cookie_name":    {"WEB_AUTH_CSRF_COOKIE_NAME"},
+		"bootstrap.admin_username":     {"BOOTSTRAP_ADMIN_USERNAME"},
+		"bootstrap.admin_password":     {"BOOTSTRAP_ADMIN_PASSWORD"},
 	}
 	for key, envNames := range bindings {
 		args := append([]string{key}, envNames...)
@@ -205,6 +230,11 @@ func bindEnvironment(v *viper.Viper) {
 }
 
 func validateProductionSecurity(v *viper.Viper, cfg *Config) error {
+	if cfg.WebAuth.Enabled {
+		if err := validateWebAuth(cfg, strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production")); err != nil {
+			return err
+		}
+	}
 	if !strings.EqualFold(strings.TrimSpace(cfg.App.Env), "production") {
 		return nil
 	}
@@ -222,6 +252,45 @@ func validateProductionSecurity(v *viper.Viper, cfg *Config) error {
 	password := strings.TrimSpace(cfg.Bootstrap.AdminPassword)
 	if password == "123456" || len(password) < 12 {
 		return ErrUnsafeProductionBootstrapPassword
+	}
+	return nil
+}
+
+func validateWebAuth(cfg *Config, production bool) error {
+	web := &cfg.WebAuth
+	web.CookieDomain = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(web.CookieDomain)), ".")
+	web.RefreshCookieName = strings.TrimSpace(web.RefreshCookieName)
+	web.CSRFCookieName = strings.TrimSpace(web.CSRFCookieName)
+	if len(web.AllowedOrigins) == 0 || web.RefreshCookieName == "" || web.CSRFCookieName == "" {
+		return ErrUnsafeProductionWebAuth
+	}
+	if web.CookieDomain != "" {
+		if _, err := publicsuffix.EffectiveTLDPlusOne(web.CookieDomain); err != nil {
+			return ErrUnsafeProductionWebAuth
+		}
+	}
+	for _, rawOrigin := range web.AllowedOrigins {
+		origin := strings.TrimSpace(rawOrigin)
+		parsed, err := url.Parse(origin)
+		if err != nil || origin == "*" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return ErrUnsafeProductionWebAuth
+		}
+		if web.CookieDomain != "" {
+			host := strings.ToLower(parsed.Hostname())
+			if host != web.CookieDomain && !strings.HasSuffix(host, "."+web.CookieDomain) {
+				return ErrUnsafeProductionWebAuth
+			}
+		}
+	}
+	if production {
+		if !web.Secure || !cfg.CORS.AllowCredentials {
+			return ErrUnsafeProductionWebAuth
+		}
+		for _, origin := range cfg.CORS.AllowedOrigins {
+			if strings.TrimSpace(origin) == "*" {
+				return ErrUnsafeProductionWebAuth
+			}
+		}
 	}
 	return nil
 }

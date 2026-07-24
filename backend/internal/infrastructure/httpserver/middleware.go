@@ -2,7 +2,9 @@ package httpserver
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
+	"net/url"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -175,6 +177,45 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func RequireWebOrigin(cfg config.WebAuthConfig) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(cfg.AllowedOrigins))
+	for _, rawOrigin := range cfg.AllowedOrigins {
+		if origin, ok := canonicalOrigin(rawOrigin); ok {
+			allowed[origin] = struct{}{}
+		}
+	}
+	return func(c *gin.Context) {
+		origin, ok := canonicalOrigin(c.GetHeader("Origin"))
+		if _, exists := allowed[origin]; !ok || !exists {
+			response.Failure(c, apperror.ErrOriginForbidden, nil)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func RequireCSRF(cfg config.WebAuthConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		cookieValue, err := c.Cookie(cfg.CSRFCookieName)
+		headerValue := c.GetHeader("X-CSRF-Token")
+		if err != nil || cookieValue == "" || headerValue == "" || subtle.ConstantTimeCompare([]byte(cookieValue), []byte(headerValue)) != 1 {
+			response.Failure(c, apperror.ErrCSRFInvalid, nil)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+func canonicalOrigin(raw string) (string, bool) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", false
+	}
+	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host), true
 }
 
 func formatMaxAge(duration time.Duration) string {

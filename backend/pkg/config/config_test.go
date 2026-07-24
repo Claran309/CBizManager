@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -209,6 +210,65 @@ func TestRepositoryDevelopmentConfigLoads(t *testing.T) {
 	}
 	if len(cfg.CORS.AllowedOrigins) == 0 {
 		t.Fatal("repository development config must define at least one CORS origin")
+	}
+}
+
+func TestLoadWebAuthConfiguration(t *testing.T) {
+	path := writeConfig(t, `
+app:
+  env: development
+web_auth:
+  enabled: true
+  secure: false
+  allowed_origins: [http://localhost:3000]
+  refresh_cookie_name: cbiz_refresh
+  csrf_cookie_name: cbiz_csrf
+`)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() error=%v", err)
+	}
+	if !cfg.WebAuth.Enabled || cfg.WebAuth.Secure || cfg.WebAuth.AllowedOrigins[0] != "http://localhost:3000" {
+		t.Fatalf("WebAuth=%+v", cfg.WebAuth)
+	}
+}
+
+func TestLoadRejectsUnsafeProductionWebAuth(t *testing.T) {
+	base := `
+app:
+  env: production
+jwt:
+  secret: production-jwt-secret-at-least-32-bytes
+bootstrap:
+  admin_username: prod-admin
+  admin_password: strong-password
+cors:
+  allowed_origins: [https://app.example.com]
+  allow_credentials: true
+web_auth:
+  enabled: true
+  secure: %t
+  allowed_origins: ["%s"]
+  cookie_domain: %s
+`
+	tests := []struct {
+		name, origin, domain string
+		secure               bool
+		want                 error
+	}{
+		{"secure required", "https://app.example.com", "example.com", false, config.ErrUnsafeProductionWebAuth},
+		{"wildcard forbidden", "*", "example.com", true, config.ErrUnsafeProductionWebAuth},
+		{"uncontrolled cookie domain", "https://app.example.net", "example.com", true, config.ErrUnsafeProductionWebAuth},
+		{"public suffix cookie domain", "https://app.com", "com", true, config.ErrUnsafeProductionWebAuth},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := writeConfig(t, fmt.Sprintf(base, test.secure, test.origin, test.domain))
+			_, err := config.Load(path)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Load() error=%v want=%v", err, test.want)
+			}
+		})
 	}
 }
 

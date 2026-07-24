@@ -34,6 +34,16 @@ cors:
     - http://localhost:3000
     - http://127.0.0.1:3000
   allowed_methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
-  allowed_headers: [Authorization, Content-Type, X-Request-ID]
-  allow_credentials: false
+  allowed_headers: [Authorization, Content-Type, X-Request-ID, X-CSRF-Token]
+  allow_credentials: true
   max_age: 12h
+
+web_auth:
+  enabled: true
+  secure: false
+  allowed_origins:
+    - http://localhost:3000
+    - http://127.0.0.1:3000
+  cookie_domain: ""
+  refresh_cookie_name: cbiz_refresh
+  csrf_cookie_name: cbiz_csrf
