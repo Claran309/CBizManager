@@ -14,7 +14,17 @@ abstract interface class AuthRemoteDataSource {
 
   Future<TokenResponse> refreshWeb();
 
+  Future<AuthProfile> me(String accessToken);
+
   Future<void> logout({required bool web, String? accessToken});
+}
+
+/// Profile fields that must be read from the server rather than inferred from
+/// an untrusted client-side token payload.
+final class AuthProfile {
+  const AuthProfile({required this.mustChangePassword});
+
+  final bool mustChangePassword;
 }
 
 abstract interface class AuthRepository {
@@ -86,10 +96,12 @@ final class DefaultAuthRepository implements AuthRepository {
       // session whose refresh rotation was never safely recorded.
       await credentials.writeRefreshToken(refreshToken);
     }
+    final profile = await remote.me(response.accessToken);
     accessTokens.accessToken = response.accessToken;
     return AuthSession(
       accessToken: response.accessToken,
       accessExpiresAt: response.accessExpiresAt,
+      mustChangePassword: profile.mustChangePassword,
     );
   }
 }
@@ -135,6 +147,36 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
     null,
     options: _webOptions(requireCSRF: true),
   );
+
+  @override
+  Future<AuthProfile> me(String accessToken) async {
+    final response = await _dio.get<Object?>(
+      '$_apiPrefix/me',
+      options: Options(
+        headers: <String, Object?>{'Authorization': 'Bearer $accessToken'},
+      ),
+    );
+    final raw = response.data;
+    if (raw is! Map) {
+      throw const FormatException('Current-user response must be an object');
+    }
+    final envelope = ApiEnvelope<Map<String, Object?>>.fromJson(
+      Map<String, Object?>.from(raw),
+      (Object? value) {
+        if (value is! Map) {
+          throw const FormatException('Current-user data must be an object');
+        }
+        return Map<String, Object?>.from(value);
+      },
+    );
+    final mustChangePassword = envelope.data?['must_change_password'];
+    if (mustChangePassword is! bool) {
+      throw const FormatException(
+        'Current-user must_change_password is required',
+      );
+    }
+    return AuthProfile(mustChangePassword: mustChangePassword);
+  }
 
   @override
   Future<void> logout({required bool web, String? accessToken}) async {

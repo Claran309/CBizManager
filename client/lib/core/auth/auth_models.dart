@@ -22,10 +22,15 @@ final class TokenResponse {
 
 /// The short-lived credential retained only while this process is alive.
 final class AuthSession {
-  const AuthSession({required this.accessToken, this.accessExpiresAt});
+  const AuthSession({
+    required this.accessToken,
+    this.accessExpiresAt,
+    this.mustChangePassword = false,
+  });
 
   final String accessToken;
   final DateTime? accessExpiresAt;
+  final bool mustChangePassword;
 }
 
 /// Keeps the access token out of durable storage and makes it replaceable in

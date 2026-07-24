@@ -18,8 +18,11 @@ final class RecordingAuthAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
+    final responseBody = options.uri.path.endsWith('/me')
+        ? '''{"code":"OK","message":"success","data":{"must_change_password":true},"request_id":"request-1"}'''
+        : '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''';
     return ResponseBody.fromString(
-      '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''',
+      responseBody,
       200,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[Headers.jsonContentType],
@@ -66,8 +69,10 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   var webLoginCalls = 0;
   var nativeRefreshCalls = 0;
   var webRefreshCalls = 0;
+  var meCalls = 0;
   var logoutCalls = 0;
   Object? logoutError;
+  var mustChangePassword = true;
   String? receivedRefreshToken;
   TokenResponse response = TokenResponse(
     accessToken: 'access',
@@ -102,6 +107,12 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   }
 
   @override
+  Future<AuthProfile> me(String accessToken) async {
+    meCalls++;
+    return AuthProfile(mustChangePassword: mustChangePassword);
+  }
+
+  @override
   Future<void> logout({required bool web, String? accessToken}) async {
     logoutCalls++;
     final error = logoutError;
@@ -125,6 +136,7 @@ void main() {
 
     final login = await repository.login('user', 'password');
     expect(login.accessToken, 'access');
+    expect(login.mustChangePassword, isTrue);
     expect(credentials.token, 'refresh');
     expect(accessTokens.accessToken, 'access');
 
@@ -138,6 +150,7 @@ void main() {
     expect(restored.accessToken, 'next-access');
     expect(remote.receivedRefreshToken, 'refresh');
     expect(credentials.token, 'next-refresh');
+    expect(remote.meCalls, 2);
   });
 
   test(
@@ -172,22 +185,29 @@ void main() {
       );
 
       await remote.loginNative('user', 'password');
+      final profile = await remote.me('native-access');
       await remote.refreshWeb();
       await remote.logout(web: true);
       await remote.logout(web: false, accessToken: 'native-access');
 
       expect(adapter.requests.map((request) => request.uri.path), <String>[
         '/api/v1/auth/login',
+        '/api/v1/auth/me',
         '/api/v1/auth/web/refresh',
         '/api/v1/auth/web/logout',
         '/api/v1/auth/logout',
       ]);
-      expect(adapter.requests[1].headers['X-CSRF-Token'], 'csrf-token');
-      expect(adapter.requests[2].headers['X-CSRF-Token'], 'csrf-token');
-      expect(adapter.requests[1].extra['withCredentials'], isTrue);
-      expect(adapter.requests[2].extra['withCredentials'], isTrue);
+      expect(profile.mustChangePassword, isTrue);
       expect(
-        adapter.requests[3].headers['Authorization'],
+        adapter.requests[1].headers['Authorization'],
+        'Bearer native-access',
+      );
+      expect(adapter.requests[2].headers['X-CSRF-Token'], 'csrf-token');
+      expect(adapter.requests[3].headers['X-CSRF-Token'], 'csrf-token');
+      expect(adapter.requests[2].extra['withCredentials'], isTrue);
+      expect(adapter.requests[3].extra['withCredentials'], isTrue);
+      expect(
+        adapter.requests[4].headers['Authorization'],
         'Bearer native-access',
       );
     },
