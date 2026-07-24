@@ -80,5 +80,3 @@ deploy/**/volumes/
 
 # docs
 AGENTS.md
-docs/superpowers/
-docs/update/
