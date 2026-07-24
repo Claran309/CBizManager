@@ -74,6 +74,17 @@ func TestMiddlewarePasswordAndRoleGuards(t *testing.T) {
 			name: "owner allowed", principal: identity.Principal{AccountType: identity.AccountTypeGroupOwner, MemberType: "owner"},
 			middleware: RequireGroupOwner(), wantStatus: http.StatusNoContent,
 		},
+		{
+			name: "platform denied tenant", principal: identity.Principal{AccountType: identity.AccountTypePlatformAdmin},
+			middleware: RequireTenantGroup(), wantStatus: http.StatusForbidden, wantCode: apperror.CodeForbidden,
+		},
+		{
+			name: "member with group allowed tenant", principal: func() identity.Principal {
+				groupID := uint64(7)
+				return identity.Principal{GroupID: &groupID, AccountType: identity.AccountTypeMember, MemberType: "member"}
+			}(),
+			middleware: RequireTenantGroup(), wantStatus: http.StatusNoContent,
+		},
 	}
 
 	for _, tt := range tests {

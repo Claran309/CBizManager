@@ -71,6 +71,16 @@ func RequireGroupOwner() gin.HandlerFunc {
 	})
 }
 
+func RequireTenantGroup() gin.HandlerFunc {
+	return requireRole(func(principal *identity.Principal) bool {
+		if principal.GroupID == nil {
+			return false
+		}
+		return (principal.AccountType == identity.AccountTypeGroupOwner && principal.MemberType == "owner") ||
+			(principal.AccountType == identity.AccountTypeMember && principal.MemberType == "member")
+	})
+}
+
 func requireRole(allowed func(*identity.Principal) bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		principal, ok := identity.PrincipalFromContext(c)

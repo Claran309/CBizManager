@@ -14,10 +14,13 @@ import (
 	"syscall"
 	"time"
 
+	"CBizDocsManager/backend/internal/authorization"
+	"CBizDocsManager/backend/internal/dictionary"
 	"CBizDocsManager/backend/internal/identity"
 	"CBizDocsManager/backend/internal/infrastructure/cache"
 	"CBizDocsManager/backend/internal/infrastructure/database"
 	"CBizDocsManager/backend/internal/infrastructure/httpserver"
+	"CBizDocsManager/backend/internal/member"
 	"CBizDocsManager/backend/internal/organization"
 	"CBizDocsManager/backend/internal/platform"
 	"CBizDocsManager/backend/migrations"
@@ -84,9 +87,13 @@ func run(ctx context.Context, configPath string) error {
 		return fmt.Errorf("初始化 JWT: %w", err)
 	}
 	passwords := identity.NewPasswordManager()
-	identityService := identity.NewService(identity.NewRepository(db), passwords, tokens, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
+	identityRepo := identity.NewRepository(db)
+	identityService := identity.NewService(identityRepo, passwords, tokens, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
 	platformService := platform.NewService(platform.NewRepository(db), passwords)
 	organizationService := organization.NewService(organization.NewRepository(db), passwords)
+	authorizer := authorization.NewAuthorizer(authorization.NewRepository(db))
+	memberService := member.NewService(member.NewRepository(db), authorizer)
+	dictionaryService := dictionary.NewService(dictionary.NewRepository(db), authorizer)
 
 	created, err := identityService.BootstrapPlatformAdmin(startupCtx, cfg.Bootstrap.AdminUsername, cfg.Bootstrap.AdminPassword)
 	if err != nil {
@@ -101,11 +108,15 @@ func run(ctx context.Context, configPath string) error {
 	}
 
 	identityHandler := identity.NewHandler(identityService)
+	webIdentityHandler := identity.NewWebHandler(identityService, cfg.WebAuth)
 	platformHandler := platform.NewHandler(platformService)
 	organizationHandler := organization.NewHandler(organizationService)
+	memberHandler := member.NewHandler(memberService)
+	dictionaryHandler := dictionary.NewHandler(dictionaryService)
 	router := httpserver.NewRouter(httpserver.RouterDependencies{
 		Logger:        logger,
 		CORS:          cfg.CORS,
+		WebAuth:       cfg.WebAuth,
 		Authenticator: identityService,
 		Health:        httpserver.NewRuntimeHealthChecker(sqlDB, redisClient, redisState),
 		Routes: httpserver.RouteHandlers{
@@ -113,6 +124,12 @@ func run(ctx context.Context, configPath string) error {
 			Refresh: identityHandler.Refresh, Logout: identityHandler.Logout,
 			Me: identityHandler.Me, ChangePassword: identityHandler.ChangePassword,
 			CreateGroup: platformHandler.CreateGroup, CreateInvitation: organizationHandler.CreateInvitation,
+			WebLogin: webIdentityHandler.Login, WebRefresh: webIdentityHandler.Refresh, WebLogout: webIdentityHandler.Logout,
+			ListMembers: memberHandler.List, ChangeMemberStatus: memberHandler.ChangeStatus,
+			GetMemberPermissions: memberHandler.GetPermissions, ReplaceMemberPermissions: memberHandler.ReplacePermissions,
+			PermissionCatalog: memberHandler.PermissionCatalog,
+			ListDictionaries:  dictionaryHandler.List, CreateDictionary: dictionaryHandler.Create,
+			UpdateDictionary: dictionaryHandler.Update, ChangeDictionaryStatus: dictionaryHandler.ChangeStatus,
 		},
 	})
 

@@ -18,19 +18,32 @@ type HealthChecker interface {
 }
 
 type RouteHandlers struct {
-	Login            gin.HandlerFunc
-	Register         gin.HandlerFunc
-	Refresh          gin.HandlerFunc
-	Logout           gin.HandlerFunc
-	Me               gin.HandlerFunc
-	ChangePassword   gin.HandlerFunc
-	CreateGroup      gin.HandlerFunc
-	CreateInvitation gin.HandlerFunc
+	Login                    gin.HandlerFunc
+	Register                 gin.HandlerFunc
+	Refresh                  gin.HandlerFunc
+	Logout                   gin.HandlerFunc
+	Me                       gin.HandlerFunc
+	ChangePassword           gin.HandlerFunc
+	CreateGroup              gin.HandlerFunc
+	CreateInvitation         gin.HandlerFunc
+	WebLogin                 gin.HandlerFunc
+	WebRefresh               gin.HandlerFunc
+	WebLogout                gin.HandlerFunc
+	ListMembers              gin.HandlerFunc
+	ChangeMemberStatus       gin.HandlerFunc
+	GetMemberPermissions     gin.HandlerFunc
+	ReplaceMemberPermissions gin.HandlerFunc
+	PermissionCatalog        gin.HandlerFunc
+	ListDictionaries         gin.HandlerFunc
+	CreateDictionary         gin.HandlerFunc
+	UpdateDictionary         gin.HandlerFunc
+	ChangeDictionaryStatus   gin.HandlerFunc
 }
 
 type RouterDependencies struct {
 	Logger        *zap.Logger
 	CORS          config.CORSConfig
+	WebAuth       config.WebAuthConfig
 	Authenticator Authenticator
 	Health        HealthChecker
 	Routes        RouteHandlers
@@ -49,6 +62,13 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	auth.POST("/login", deps.Routes.Login)
 	auth.POST("/register", deps.Routes.Register)
 	auth.POST("/refresh", deps.Routes.Refresh)
+	if deps.WebAuth.Enabled {
+		web := auth.Group("/web")
+		web.Use(RequireWebOrigin(deps.WebAuth))
+		web.POST("/login", deps.Routes.WebLogin)
+		web.POST("/refresh", RequireCSRF(deps.WebAuth), deps.Routes.WebRefresh)
+		web.POST("/logout", RequireCSRF(deps.WebAuth), deps.Routes.WebLogout)
+	}
 
 	authenticated := api.Group("")
 	authenticated.Use(Authentication(deps.Authenticator))
@@ -60,9 +80,20 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	platform.Use(RequirePasswordChanged(), RequirePlatformAdmin())
 	platform.POST("/groups", deps.Routes.CreateGroup)
 
-	groups := authenticated.Group("/groups")
-	groups.Use(RequirePasswordChanged(), RequireGroupOwner())
-	groups.POST("/invitations", deps.Routes.CreateInvitation)
+	tenant := authenticated.Group("")
+	tenant.Use(RequirePasswordChanged(), RequireTenantGroup())
+	groups := tenant.Group("/groups")
+	groups.POST("/invitations", RequireGroupOwner(), deps.Routes.CreateInvitation)
+	groups.GET("/members", deps.Routes.ListMembers)
+	groups.PATCH("/members/:membership_id/status", deps.Routes.ChangeMemberStatus)
+	groups.GET("/members/:membership_id/permissions", deps.Routes.GetMemberPermissions)
+	groups.PUT("/members/:membership_id/permissions", deps.Routes.ReplaceMemberPermissions)
+	groups.GET("/permission-catalog", deps.Routes.PermissionCatalog)
+
+	tenant.GET("/dictionaries", deps.Routes.ListDictionaries)
+	tenant.POST("/dictionaries", deps.Routes.CreateDictionary)
+	tenant.PUT("/dictionaries/:dictionary_id", deps.Routes.UpdateDictionary)
+	tenant.PATCH("/dictionaries/:dictionary_id/status", deps.Routes.ChangeDictionaryStatus)
 	return router
 }
 

@@ -21,7 +21,7 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := NewRouter(RouterDependencies{
 		Logger: zap.NewNop(), Authenticator: routerAuthenticator{}, Health: &stubHealth{redis: "disabled"},
-		Routes: noOpRouteHandlers(), CORS: config.CORSConfig{},
+		Routes: noOpRouteHandlers(), CORS: config.CORSConfig{}, WebAuth: config.WebAuthConfig{Enabled: true},
 	})
 	got := make([]string, 0, len(router.Routes()))
 	for _, route := range router.Routes() {
@@ -29,10 +29,13 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 	}
 	sort.Strings(got)
 	want := []string{
-		"GET /api/v1/auth/me", "GET /health/live", "GET /health/ready",
+		"GET /api/v1/auth/me", "GET /api/v1/groups/members", "GET /api/v1/groups/members/:membership_id/permissions",
+		"GET /api/v1/groups/permission-catalog", "GET /api/v1/dictionaries", "GET /health/live", "GET /health/ready",
 		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
-		"POST /api/v1/auth/register", "POST /api/v1/groups/invitations", "POST /api/v1/platform/groups",
-		"PUT /api/v1/auth/password",
+		"POST /api/v1/auth/register", "POST /api/v1/auth/web/login", "POST /api/v1/auth/web/logout", "POST /api/v1/auth/web/refresh",
+		"POST /api/v1/groups/invitations", "POST /api/v1/platform/groups", "POST /api/v1/dictionaries",
+		"PATCH /api/v1/groups/members/:membership_id/status", "PATCH /api/v1/dictionaries/:dictionary_id/status",
+		"PUT /api/v1/auth/password", "PUT /api/v1/groups/members/:membership_id/permissions", "PUT /api/v1/dictionaries/:dictionary_id",
 	}
 	sort.Strings(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -118,5 +121,9 @@ func noOpRouteHandlers() RouteHandlers {
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
+		WebLogin: noContent, WebRefresh: noContent, WebLogout: noContent,
+		ListMembers: noContent, ChangeMemberStatus: noContent, GetMemberPermissions: noContent,
+		ReplaceMemberPermissions: noContent, PermissionCatalog: noContent,
+		ListDictionaries: noContent, CreateDictionary: noContent, UpdateDictionary: noContent, ChangeDictionaryStatus: noContent,
 	}
 }
