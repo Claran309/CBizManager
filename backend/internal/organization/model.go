@@ -44,12 +44,14 @@ type Group struct {
 func (Group) TableName() string { return "groups" }
 
 type Membership struct {
-	ID                 uint64           `gorm:"primaryKey;autoIncrement"`
-	GroupID            uint64           `gorm:"not null;uniqueIndex:uk_memberships_group_user,priority:1;index:idx_memberships_group_status,priority:1"`
-	UserID             uint64           `gorm:"not null;uniqueIndex:uk_memberships_group_user,priority:2;uniqueIndex:uk_memberships_user"`
-	MemberType         MemberType       `gorm:"size:16;not null"`
-	Status             MembershipStatus `gorm:"size:16;not null;index:idx_memberships_group_status,priority:2"`
-	ActiveOwnerGroupID *uint64          `gorm:"column:active_owner_group_id;->;-:migration"`
+	ID         uint64           `gorm:"primaryKey;autoIncrement"`
+	GroupID    uint64           `gorm:"not null;uniqueIndex:uk_memberships_group_user,priority:1;index:idx_memberships_group_status,priority:1"`
+	UserID     uint64           `gorm:"not null;uniqueIndex:uk_memberships_group_user,priority:2;uniqueIndex:uk_memberships_user"`
+	MemberType MemberType       `gorm:"size:16;not null"`
+	Status     MembershipStatus `gorm:"size:16;not null;index:idx_memberships_group_status,priority:2"`
+	// Version 是成员状态和权限整体替换共用的乐观锁版本，避免并发管理请求相互覆盖。
+	Version            uint64  `gorm:"not null;default:1"`
+	ActiveOwnerGroupID *uint64 `gorm:"column:active_owner_group_id;->;-:migration"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }

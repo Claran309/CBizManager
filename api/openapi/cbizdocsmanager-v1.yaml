@@ -334,6 +334,504 @@ paths:
                 $ref: '#/components/schemas/ErrorApiResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/auth/web/login:
+    post:
+      tags: [Auth]
+      operationId: webLogin
+      summary: Web 用户登录并设置 Refresh 与 CSRF Cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功；响应体不包含 Refresh Token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthTokenApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          description: 用户名或密码错误（AUTH_INVALID_CREDENTIALS）
+          x-error-codes: [AUTH_INVALID_CREDENTIALS]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '403':
+          description: 请求来源不允许（ORIGIN_FORBIDDEN）
+          x-error-codes: [ORIGIN_FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/web/refresh:
+    post:
+      tags: [Auth]
+      operationId: webRefreshToken
+      summary: 使用 HttpOnly Cookie 刷新 Web 访问令牌
+      description: Refresh Token 只从 HttpOnly Cookie 读取，不接收 JSON Refresh Token。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/CSRFHeader'
+      responses:
+        '200':
+          description: 刷新成功；响应体不包含 Refresh Token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthTokenApiResponse'
+        '401':
+          description: Refresh Cookie 无效或已过期（AUTH_REFRESH_INVALID、AUTH_TOKEN_EXPIRED）
+          x-error-codes: [AUTH_REFRESH_INVALID, AUTH_TOKEN_EXPIRED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '403':
+          description: CSRF 或 Origin 校验失败（CSRF_INVALID、ORIGIN_FORBIDDEN）
+          x-error-codes: [CSRF_INVALID, ORIGIN_FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/auth/web/logout:
+    post:
+      tags: [Auth]
+      operationId: webLogout
+      summary: 注销 Web Cookie 会话
+      description: Refresh Token 只从 HttpOnly Cookie 读取，不接收 JSON Refresh Token。
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/OriginHeader'
+        - $ref: '#/components/parameters/CSRFHeader'
+      responses:
+        '200':
+          description: 注销成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutApiResponse'
+        '401':
+          description: Refresh Cookie 无效（AUTH_REFRESH_INVALID）
+          x-error-codes: [AUTH_REFRESH_INVALID]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '403':
+          description: CSRF 或 Origin 校验失败（CSRF_INVALID、ORIGIN_FORBIDDEN）
+          x-error-codes: [CSRF_INVALID, ORIGIN_FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/groups/members:
+    get:
+      tags: [Group]
+      operationId: listGroupMembers
+      summary: 分页查询当前组成员
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, disabled, removed]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPageApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无成员管理权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/groups/members/{membership_id}/status:
+    patch:
+      tags: [Group]
+      operationId: changeMemberStatus
+      summary: 修改普通成员状态
+      parameters:
+        - $ref: '#/components/parameters/MembershipIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeMemberStatusRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberApiResponse'
+        '400':
+          description: 请求参数或状态转换无效（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无权限、目标为主账号或操作自己
+          x-error-codes: [FORBIDDEN, MEMBER_OWNER_PROTECTED, MEMBER_SELF_OPERATION_FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 成员不存在（MEMBER_NOT_FOUND）
+          x-error-codes: [MEMBER_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 资源版本冲突（RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/groups/members/{membership_id}/permissions:
+    get:
+      tags: [Group]
+      operationId: getMemberPermissions
+      summary: 查询成员权限
+      parameters:
+        - $ref: '#/components/parameters/MembershipIDPath'
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPermissionsApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无成员管理权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 成员不存在（MEMBER_NOT_FOUND）
+          x-error-codes: [MEMBER_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Group]
+      operationId: replaceMemberPermissions
+      summary: 整体替换普通成员权限集合
+      parameters:
+        - $ref: '#/components/parameters/MembershipIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceMemberPermissionsRequest'
+      responses:
+        '200':
+          description: 替换成功，或目标集合与当前集合相同时幂等返回
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberPermissionsApiResponse'
+        '400':
+          description: 请求参数或权限码无效（VALIDATION_FAILED、PERMISSION_CODE_INVALID）
+          x-error-codes: [VALIDATION_FAILED, PERMISSION_CODE_INVALID]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 非主账号、目标为主账号或操作自己
+          x-error-codes: [FORBIDDEN, MEMBER_OWNER_PROTECTED, MEMBER_SELF_OPERATION_FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 成员不存在（MEMBER_NOT_FOUND）
+          x-error-codes: [MEMBER_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 资源版本冲突（RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/groups/permission-catalog:
+    get:
+      tags: [Group]
+      operationId: getPermissionCatalog
+      summary: 查询后端认可的固定权限目录
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionCatalogApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无权访问组资源（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/dictionaries:
+    get:
+      tags: [Group]
+      operationId: listDictionaryEntries
+      summary: 分页查询当前组辅助字典
+      parameters:
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+        - name: kind
+          in: query
+          schema:
+            $ref: '#/components/schemas/DictionaryKind'
+        - name: parent_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/DictionaryStatus'
+        - name: keyword
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryEntryPageApiResponse'
+        '400':
+          description: 查询参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无权访问组资源（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [Group]
+      operationId: createDictionaryEntry
+      summary: 创建辅助字典条目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDictionaryEntryRequest'
+      responses:
+        '201':
+          description: 创建成功，新资源版本固定从 1 开始
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryEntryApiResponse'
+        '400':
+          description: 请求参数或父级无效（VALIDATION_FAILED、DICTIONARY_PARENT_INVALID）
+          x-error-codes: [VALIDATION_FAILED, DICTIONARY_PARENT_INVALID]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无字典管理权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 同一范围字典名称已存在（DICTIONARY_NAME_EXISTS）
+          x-error-codes: [DICTIONARY_NAME_EXISTS]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/dictionaries/{dictionary_id}:
+    put:
+      tags: [Group]
+      operationId: updateDictionaryEntry
+      summary: 修改辅助字典条目
+      parameters:
+        - $ref: '#/components/parameters/DictionaryIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDictionaryEntryRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryEntryApiResponse'
+        '400':
+          description: 请求参数或父级无效（VALIDATION_FAILED、DICTIONARY_PARENT_INVALID）
+          x-error-codes: [VALIDATION_FAILED, DICTIONARY_PARENT_INVALID]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无字典管理权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 字典条目不存在（DICTIONARY_NOT_FOUND）
+          x-error-codes: [DICTIONARY_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 名称或资源版本冲突（DICTIONARY_NAME_EXISTS、RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [DICTIONARY_NAME_EXISTS, RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/dictionaries/{dictionary_id}/status:
+    patch:
+      tags: [Group]
+      operationId: changeDictionaryEntryStatus
+      summary: 启用或停用辅助字典条目
+      parameters:
+        - $ref: '#/components/parameters/DictionaryIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeDictionaryStatusRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryEntryApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无字典管理权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 字典条目不存在（DICTIONARY_NOT_FOUND）
+          x-error-codes: [DICTIONARY_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 资源版本冲突（RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /health/live:
     get:
       tags: [Health]
@@ -387,6 +885,52 @@ components:
       description: 本次请求的唯一追踪 ID
       schema:
         type: string
+  parameters:
+    MembershipIDPath:
+      name: membership_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    DictionaryIDPath:
+      name: dictionary_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    PageQuery:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeQuery:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OriginHeader:
+      name: Origin
+      in: header
+      required: true
+      description: 必须命中服务端显式配置的 Web Origin 白名单
+      schema:
+        type: string
+    CSRFHeader:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: 必须与可读 CSRF Cookie 中的值一致
+      schema:
+        type: string
   responses:
     TokenExpired:
       description: 访问令牌无效或已过期（AUTH_TOKEN_EXPIRED）
@@ -422,6 +966,16 @@ components:
         - INVITATION_EXPIRED
         - INVITATION_USED
         - GROUP_NAME_EXISTS
+        - MEMBER_NOT_FOUND
+        - MEMBER_OWNER_PROTECTED
+        - MEMBER_SELF_OPERATION_FORBIDDEN
+        - PERMISSION_CODE_INVALID
+        - DICTIONARY_NOT_FOUND
+        - DICTIONARY_NAME_EXISTS
+        - DICTIONARY_PARENT_INVALID
+        - RESOURCE_VERSION_CONFLICT
+        - CSRF_INVALID
+        - ORIGIN_FORBIDDEN
         - FORBIDDEN
         - INTERNAL_ERROR
     FieldError:
@@ -702,6 +1256,308 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/InvitationCreatedData'
+    WebAccessTokenData:
+      type: object
+      additionalProperties: false
+      description: Web Refresh Token 仅存在于 HttpOnly Cookie，绝不进入 JSON 响应。
+      required: [access_token, access_expires_at]
+      properties:
+        access_token:
+          type: string
+        access_expires_at:
+          type: string
+          format: date-time
+    WebAuthTokenApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/WebAccessTokenData'
+    PermissionCode:
+      type: string
+      enum:
+        - document.view_others
+        - document.edit_others
+        - report.view
+        - member.manage
+        - dictionary.manage
+        - settlement.approve
+    PermissionCatalogItem:
+      type: object
+      additionalProperties: false
+      required: [code, name, description]
+      properties:
+        code:
+          $ref: '#/components/schemas/PermissionCode'
+        name:
+          type: string
+        description:
+          type: string
+    PermissionCatalogData:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionCatalogItem'
+    PermissionCatalogApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PermissionCatalogData'
+    PaginationEnvelope:
+      type: object
+      additionalProperties: false
+      required: [page, page_size, total]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    MemberData:
+      type: object
+      additionalProperties: false
+      required: [membership_id, user, member_type, status, permission_codes, version, created_at, updated_at]
+      properties:
+        membership_id:
+          type: integer
+          format: int64
+          minimum: 1
+        user:
+          $ref: '#/components/schemas/UserSummary'
+        member_type:
+          type: string
+          enum: [owner, member]
+        status:
+          type: string
+          enum: [active, disabled, removed]
+        permission_codes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MemberPageData:
+      type: object
+      additionalProperties: false
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberData'
+        pagination:
+          $ref: '#/components/schemas/PaginationEnvelope'
+    MemberPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MemberPageData'
+    MemberApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MemberData'
+    ChangeMemberStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [active, disabled, removed]
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    ReplaceMemberPermissionsRequest:
+      type: object
+      additionalProperties: false
+      required: [permission_codes, version]
+      properties:
+        permission_codes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    MemberPermissionsData:
+      type: object
+      additionalProperties: false
+      required: [membership_id, permission_codes, version]
+      properties:
+        membership_id:
+          type: integer
+          format: int64
+          minimum: 1
+        permission_codes:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/PermissionCode'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    MemberPermissionsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MemberPermissionsData'
+    DictionaryKind:
+      type: string
+      enum: [supplier_company, customer, product_name, product_model, unit, shipping_unit]
+    DictionaryStatus:
+      type: string
+      enum: [active, disabled]
+    DictionaryEntryData:
+      type: object
+      additionalProperties: false
+      required: [id, group_id, kind, name, status, version, created_by, updated_by, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        group_id:
+          type: integer
+          format: int64
+          minimum: 1
+        kind:
+          $ref: '#/components/schemas/DictionaryKind'
+        name:
+          type: string
+        parent_id:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        contact_phone:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/DictionaryStatus'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_by:
+          type: integer
+          format: int64
+          minimum: 1
+        updated_by:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DictionaryEntryPageData:
+      type: object
+      additionalProperties: false
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DictionaryEntryData'
+        pagination:
+          $ref: '#/components/schemas/PaginationEnvelope'
+    DictionaryEntryPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DictionaryEntryPageData'
+    DictionaryEntryApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DictionaryEntryData'
+    CreateDictionaryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, name]
+      properties:
+        kind:
+          $ref: '#/components/schemas/DictionaryKind'
+        name:
+          type: string
+          minLength: 1
+        parent_id:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        contact_phone:
+          type: string
+          nullable: true
+    UpdateDictionaryEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [name, version]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        parent_id:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+        contact_phone:
+          type: string
+          nullable: true
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    ChangeDictionaryStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, version]
+      properties:
+        status:
+          $ref: '#/components/schemas/DictionaryStatus'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
     HealthData:
       type: object
       additionalProperties: false

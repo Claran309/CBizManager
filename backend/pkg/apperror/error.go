@@ -6,18 +6,28 @@ import (
 )
 
 const (
-	CodeValidationFailed           = "VALIDATION_FAILED"
-	CodeAuthInvalidCredentials     = "AUTH_INVALID_CREDENTIALS"
-	CodeAuthTokenExpired           = "AUTH_TOKEN_EXPIRED"
-	CodeAuthRefreshInvalid         = "AUTH_REFRESH_INVALID"
-	CodeAuthPasswordChangeRequired = "AUTH_PASSWORD_CHANGE_REQUIRED"
-	CodeUserUsernameExists         = "USER_USERNAME_EXISTS"
-	CodeInvitationInvalid          = "INVITATION_INVALID"
-	CodeInvitationExpired          = "INVITATION_EXPIRED"
-	CodeInvitationUsed             = "INVITATION_USED"
-	CodeGroupNameExists            = "GROUP_NAME_EXISTS"
-	CodeForbidden                  = "FORBIDDEN"
-	CodeInternalError              = "INTERNAL_ERROR"
+	CodeValidationFailed             = "VALIDATION_FAILED"
+	CodeAuthInvalidCredentials       = "AUTH_INVALID_CREDENTIALS"
+	CodeAuthTokenExpired             = "AUTH_TOKEN_EXPIRED"
+	CodeAuthRefreshInvalid           = "AUTH_REFRESH_INVALID"
+	CodeAuthPasswordChangeRequired   = "AUTH_PASSWORD_CHANGE_REQUIRED"
+	CodeUserUsernameExists           = "USER_USERNAME_EXISTS"
+	CodeInvitationInvalid            = "INVITATION_INVALID"
+	CodeInvitationExpired            = "INVITATION_EXPIRED"
+	CodeInvitationUsed               = "INVITATION_USED"
+	CodeGroupNameExists              = "GROUP_NAME_EXISTS"
+	CodeMemberNotFound               = "MEMBER_NOT_FOUND"
+	CodeMemberOwnerProtected         = "MEMBER_OWNER_PROTECTED"
+	CodeMemberSelfOperationForbidden = "MEMBER_SELF_OPERATION_FORBIDDEN"
+	CodePermissionCodeInvalid        = "PERMISSION_CODE_INVALID"
+	CodeDictionaryNotFound           = "DICTIONARY_NOT_FOUND"
+	CodeDictionaryNameExists         = "DICTIONARY_NAME_EXISTS"
+	CodeDictionaryParentInvalid      = "DICTIONARY_PARENT_INVALID"
+	CodeResourceVersionConflict      = "RESOURCE_VERSION_CONFLICT"
+	CodeCSRFInvalid                  = "CSRF_INVALID"
+	CodeOriginForbidden              = "ORIGIN_FORBIDDEN"
+	CodeForbidden                    = "FORBIDDEN"
+	CodeInternalError                = "INTERNAL_ERROR"
 )
 
 // Error 是跨 Handler、Service 与 Repository 传递的稳定业务错误。
@@ -96,6 +106,20 @@ var (
 	ErrInvitationUsed    = New(CodeInvitationUsed, "邀请码已使用", http.StatusBadRequest)
 
 	ErrGroupNameExists = New(CodeGroupNameExists, "组名已存在", http.StatusConflict)
-	ErrForbidden       = New(CodeForbidden, "无权执行此操作", http.StatusForbidden)
-	ErrInternal        = New(CodeInternalError, "服务内部错误", http.StatusInternalServerError)
+
+	ErrMemberNotFound        = New(CodeMemberNotFound, "成员不存在", http.StatusNotFound)
+	ErrMemberOwnerProtected  = New(CodeMemberOwnerProtected, "不能通过成员接口操作主账号", http.StatusForbidden)
+	ErrMemberSelfForbidden   = New(CodeMemberSelfOperationForbidden, "不能对自己的成员关系执行此操作", http.StatusForbidden)
+	ErrPermissionCodeInvalid = New(CodePermissionCodeInvalid, "权限码无效", http.StatusBadRequest)
+
+	ErrDictionaryNotFound      = New(CodeDictionaryNotFound, "字典条目不存在", http.StatusNotFound)
+	ErrDictionaryNameExists    = New(CodeDictionaryNameExists, "同一范围内的字典名称已存在", http.StatusConflict)
+	ErrDictionaryParentInvalid = New(CodeDictionaryParentInvalid, "字典父级无效", http.StatusBadRequest)
+	ErrResourceVersionConflict = New(CodeResourceVersionConflict, "资源已被其他请求修改", http.StatusConflict)
+
+	ErrCSRFInvalid     = New(CodeCSRFInvalid, "CSRF 校验失败", http.StatusForbidden)
+	ErrOriginForbidden = New(CodeOriginForbidden, "请求来源不允许", http.StatusForbidden)
+
+	ErrForbidden = New(CodeForbidden, "无权执行此操作", http.StatusForbidden)
+	ErrInternal  = New(CodeInternalError, "服务内部错误", http.StatusInternalServerError)
 )

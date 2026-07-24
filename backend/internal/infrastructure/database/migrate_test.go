@@ -280,6 +280,62 @@ func TestMigrationAuthSQLContract(t *testing.T) {
 	}
 }
 
+func TestMigrationMembersPermissionsDictionariesSQLContract(t *testing.T) {
+	upBytes, err := migrations.Files.ReadFile("000002_members_permissions_dictionaries.up.sql")
+	if err != nil {
+		t.Fatalf("read embedded up migration: %v", err)
+	}
+	downBytes, err := migrations.Files.ReadFile("000002_members_permissions_dictionaries.down.sql")
+	if err != nil {
+		t.Fatalf("read embedded down migration: %v", err)
+	}
+
+	up := normalizeSQL(string(upBytes))
+	for _, fragment := range []string{
+		"alter table memberships add column version bigint unsigned not null default 1",
+		"unique key uk_memberships_id_group (id, group_id)",
+		"create table membership_permissions",
+		"unique key uk_membership_permissions_membership_code (membership_id, permission_code)",
+		"constraint fk_membership_permissions_membership_group foreign key (membership_id, group_id) references memberships (id, group_id)",
+		"create table dictionary_entries",
+		"parent_scope_id bigint unsigned generated always as (coalesce(parent_id, 0)) stored",
+		"unique key uk_dictionary_scope_name (group_id, kind, parent_scope_id, normalized_name)",
+		"constraint fk_dictionary_entries_parent foreign key (parent_id) references dictionary_entries (id)",
+		"idx_dictionary_entries_group_status",
+		"idx_dictionary_entries_group_query",
+	} {
+		if !strings.Contains(up, fragment) {
+			t.Errorf("up migration missing contract fragment %q", fragment)
+		}
+	}
+	if count := strings.Count(up, "engine=innodb"); count != 2 {
+		t.Errorf("up migration InnoDB table count = %d, want 2", count)
+	}
+	if count := strings.Count(up, "charset=utf8mb4"); count != 2 {
+		t.Errorf("up migration utf8mb4 table count = %d, want 2", count)
+	}
+
+	down := normalizeSQL(string(downBytes))
+	wantReverseOrder := []string{
+		"drop table if exists dictionary_entries",
+		"drop table if exists membership_permissions",
+		"alter table memberships drop index uk_memberships_id_group",
+		"alter table memberships drop column version",
+	}
+	lastPosition := -1
+	for _, fragment := range wantReverseOrder {
+		position := strings.Index(down, fragment)
+		if position < 0 {
+			t.Errorf("down migration missing contract fragment %q", fragment)
+			continue
+		}
+		if position <= lastPosition {
+			t.Errorf("down migration is not in reverse dependency order at %q", fragment)
+		}
+		lastPosition = position
+	}
+}
+
 func TestMySQLDSNEnablesRequiredDriverOptions(t *testing.T) {
 	normalized, err := normalizedMySQLDSN("testuser@tcp(127.0.0.1:3306)/testdb?parseTime=false&loc=Local&multiStatements=false")
 	if err != nil {
