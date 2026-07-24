@@ -1,0 +1,23 @@
+.git
+.gitignore
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local build and test output
+*.exe
+*.test
+bin/
+dist/
+tmp/
+coverage/
+coverage*.out
+*.coverprofile
+
+# Editor and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS refresh_sessions;
+DROP TABLE IF EXISTS invitations;
+DROP TABLE IF EXISTS memberships;
+DROP TABLE IF EXISTS `groups`;
+DROP TABLE IF EXISTS users;

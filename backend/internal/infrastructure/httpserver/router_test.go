@@ -1,0 +1,122 @@
+package httpserver
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sort"
+	"strings"
+	"testing"
+
+	"CBizDocsManager/backend/internal/identity"
+	"CBizDocsManager/backend/pkg/config"
+	"CBizDocsManager/backend/pkg/response"
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+)
+
+func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := NewRouter(RouterDependencies{
+		Logger: zap.NewNop(), Authenticator: routerAuthenticator{}, Health: &stubHealth{redis: "disabled"},
+		Routes: noOpRouteHandlers(), CORS: config.CORSConfig{},
+	})
+	got := make([]string, 0, len(router.Routes()))
+	for _, route := range router.Routes() {
+		got = append(got, route.Method+" "+route.Path)
+	}
+	sort.Strings(got)
+	want := []string{
+		"GET /api/v1/auth/me", "GET /health/live", "GET /health/ready",
+		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
+		"POST /api/v1/auth/register", "POST /api/v1/groups/invitations", "POST /api/v1/platform/groups",
+		"PUT /api/v1/auth/password",
+	}
+	sort.Strings(want)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("routes=\n%s\nwant=\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+func TestHealthReadinessDependsOnlyOnMySQL(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name       string
+		mysqlErr   error
+		redis      string
+		wantStatus int
+		wantMySQL  string
+	}{
+		{name: "all up", redis: "up", wantStatus: http.StatusOK, wantMySQL: "up"},
+		{name: "redis degraded", redis: "down", wantStatus: http.StatusOK, wantMySQL: "up"},
+		{name: "mysql down", mysqlErr: errors.New("mysql unavailable"), redis: "up", wantStatus: http.StatusServiceUnavailable, wantMySQL: "down"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			health := &stubHealth{mysqlErr: tt.mysqlErr, redis: tt.redis}
+			router := NewRouter(RouterDependencies{
+				Logger: zap.NewNop(), Authenticator: routerAuthenticator{}, Health: health,
+				Routes: noOpRouteHandlers(), CORS: config.CORSConfig{},
+			})
+
+			live := httptest.NewRecorder()
+			router.ServeHTTP(live, httptest.NewRequest(http.MethodGet, "/health/live", nil))
+			if live.Code != http.StatusOK {
+				t.Fatalf("live status=%d body=%s", live.Code, live.Body.String())
+			}
+			ready := httptest.NewRecorder()
+			router.ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/health/ready", nil))
+			if ready.Code != tt.wantStatus {
+				t.Fatalf("ready status=%d want=%d body=%s", ready.Code, tt.wantStatus, ready.Body.String())
+			}
+			var envelope struct {
+				Code string `json:"code"`
+				Data struct {
+					Status string `json:"status"`
+					MySQL  string `json:"mysql"`
+					Redis  string `json:"redis"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(ready.Body.Bytes(), &envelope); err != nil {
+				t.Fatalf("decode ready response: %v", err)
+			}
+			if envelope.Data.MySQL != tt.wantMySQL || envelope.Data.Redis != tt.redis {
+				t.Fatalf("ready data=%+v", envelope.Data)
+			}
+			wantHealthStatus := "ok"
+			if tt.mysqlErr != nil {
+				wantHealthStatus = "unavailable"
+			}
+			if envelope.Data.Status != wantHealthStatus {
+				t.Fatalf("ready health status=%q want=%q", envelope.Data.Status, wantHealthStatus)
+			}
+			if tt.mysqlErr == nil && envelope.Code != response.CodeOK {
+				t.Fatalf("ready code=%q want OK", envelope.Code)
+			}
+		})
+	}
+}
+
+type stubHealth struct {
+	mysqlErr error
+	redis    string
+}
+
+func (h *stubHealth) PingMySQL(context.Context) error   { return h.mysqlErr }
+func (h *stubHealth) RedisState(context.Context) string { return h.redis }
+
+type routerAuthenticator struct{}
+
+func (routerAuthenticator) Authenticate(context.Context, string) (*identity.Principal, error) {
+	return &identity.Principal{UserID: 1, AccountType: identity.AccountTypePlatformAdmin, SessionID: 1}, nil
+}
+
+func noOpRouteHandlers() RouteHandlers {
+	noContent := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	return RouteHandlers{
+		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
+		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
+	}
+}

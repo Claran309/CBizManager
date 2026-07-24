@@ -1,4 +1,4 @@
-package com.example.client
+package com.claran.cbizdocsmanager
 
 import io.flutter.embedding.android.FlutterActivity
 

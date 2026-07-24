@@ -1,4 +1,4 @@
-# ProjectF 后端基础框架与认证设计
+# CBizDocsManager 后端基础框架与认证设计
 
 ## 1. 目标
 
@@ -24,7 +24,7 @@
 - 沿用 `ClaranAIM` 的 `context.Context` 传递、接口化 Repository、配置文件加环境变量覆盖、Redis 可选降级、启动健康检查和明确的 Access/Refresh Token 区分。
 - 不照搬参考项目中的历史问题：业务错误不得全部返回 HTTP 500，不记录完整 Token 或密码，Refresh Token 必须支持服务端撤销和轮换，Handler 不包含业务逻辑。
 
-Go 模块位于 `backend/`，模块名使用 `ProjectF/backend`。
+Go 模块位于 `backend/`，模块名使用 `CBizDocsManager/backend`。
 
 ## 4. 工程结构
 
@@ -68,7 +68,7 @@ backend/
 ├─ go.mod
 └─ go.sum
 
-api/openapi/projectf-v1.yaml
+api/openapi/cbizdocsmanager-v1.yaml
 deploy/docker-compose.yml
 ```
 
@@ -76,7 +76,7 @@ deploy/docker-compose.yml
 
 ## 5. 首批 API 契约
 
-OpenAPI 文件固定为 `api/openapi/projectf-v1.yaml`，使用 `/api/v1` 前缀，至少定义以下接口：
+OpenAPI 文件固定为 `api/openapi/cbizdocsmanager-v1.yaml`，使用 `/api/v1` 前缀，至少定义以下接口：
 
 ```text
 POST /api/v1/auth/login
@@ -264,7 +264,7 @@ BOOTSTRAP_ADMIN_PASSWORD=123456
 
 ## 12. 实施顺序
 
-1. 编写并校验 `api/openapi/projectf-v1.yaml`。
+1. 编写并校验 `api/openapi/cbizdocsmanager-v1.yaml`。
 2. 根据 OpenAPI 创建请求、响应和错误契约测试。
 3. 初始化 Go 模块、配置、日志、统一响应和 HTTP 中间件。
 4. 创建首版 SQL 迁移和 Repository 接口。
