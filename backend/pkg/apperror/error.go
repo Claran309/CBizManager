@@ -43,6 +43,8 @@ const (
 	CodeFinanceRecordNotFound        = "FINANCE_RECORD_NOT_FOUND"
 	CodeFinanceDocumentMismatch      = "FINANCE_DOCUMENT_MISMATCH"
 	CodeFinanceAmountExceeds         = "FINANCE_AMOUNT_EXCEEDS"
+	CodeReportSnapshotNotFound       = "REPORT_SNAPSHOT_NOT_FOUND"
+	CodeReportPeriodEmpty            = "REPORT_PERIOD_EMPTY"
 	CodeResourceVersionConflict      = "RESOURCE_VERSION_CONFLICT"
 	CodeCSRFInvalid                  = "CSRF_INVALID"
 	CodeOriginForbidden              = "ORIGIN_FORBIDDEN"
@@ -158,6 +160,9 @@ var (
 	ErrFinanceRecordNotFound   = New(CodeFinanceRecordNotFound, "付款 / 收款 / 开票记录不存在", http.StatusNotFound)
 	ErrFinanceDocumentMismatch = New(CodeFinanceDocumentMismatch, "记录类型与单据类型不匹配", http.StatusBadRequest)
 	ErrFinanceAmountExceeds    = New(CodeFinanceAmountExceeds, "累计金额超过单据总额", http.StatusConflict)
+
+	ErrReportSnapshotNotFound = New(CodeReportSnapshotNotFound, "总结算单不存在", http.StatusNotFound)
+	ErrReportPeriodEmpty      = New(CodeReportPeriodEmpty, "统计周期内没有可汇总的单据", http.StatusBadRequest)
 
 	ErrResourceVersionConflict = New(CodeResourceVersionConflict, "资源已被其他请求修改", http.StatusConflict)
 

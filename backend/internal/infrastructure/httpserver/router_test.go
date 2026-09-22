@@ -40,6 +40,10 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 		"GET /api/v1/settlements", "GET /api/v1/settlements/:settlement_id",
 		"GET /api/v1/finance/payments", "GET /api/v1/finance/receipts", "GET /api/v1/finance/invoices",
 		"GET /api/v1/finance/statements/:document_id",
+		"GET /api/v1/reports/overview", "GET /api/v1/reports/inbound-stats",
+		"GET /api/v1/reports/outbound-stats", "GET /api/v1/reports/business-users",
+		"GET /api/v1/reports/summary-settlements", "GET /api/v1/reports/summary-settlements/:snapshot_id",
+		"POST /api/v1/reports/summary-settlements",
 		"POST /api/v1/finance/payments", "POST /api/v1/finance/payments/:record_id/revoke",
 		"POST /api/v1/finance/receipts", "POST /api/v1/finance/receipts/:record_id/revoke",
 		"POST /api/v1/finance/invoices", "POST /api/v1/finance/invoices/:record_id/revoke",
@@ -148,6 +152,10 @@ func noOpRouteHandlers() RouteHandlers {
 		Create: noContent, List: noContent, Get: noContent, Approve: noContent, Reject: noContent,
 	}
 	financeRoutes := FinanceRouteSet{Create: noContent, List: noContent, Revoke: noContent}
+	reportRoutes := ReportRouteSet{
+		Overview: noContent, InboundStats: noContent, OutboundStats: noContent, BusinessUsers: noContent,
+		CreateSnapshot: noContent, ListSnapshots: noContent, GetSnapshot: noContent,
+	}
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
@@ -161,5 +169,6 @@ func noOpRouteHandlers() RouteHandlers {
 		Settlements: settlementRoutes,
 		Payments:    financeRoutes, Receipts: financeRoutes, Invoices: financeRoutes,
 		FinanceStatement: noContent,
+		Reports:          reportRoutes,
 	}
 }

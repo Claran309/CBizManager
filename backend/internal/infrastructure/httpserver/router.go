@@ -54,6 +54,9 @@ type RouteHandlers struct {
 	// FinanceStatement 读取单张单据的结清视图。结清视图要同时汇总付款、收款、开票三类记录，
 	// 不隶属于任何单一记录类型，因此单独注册一次即可（挂三份拷贝没有意义）。
 	FinanceStatement gin.HandlerFunc
+	// Reports 是后台汇总统计：看板、入库统计、出库统计、业务员利润与总结算快照。
+	// 是否允许访问由服务层按 report.view 权限收敛（主账号默认拥有）。
+	Reports ReportRouteSet
 }
 
 // DocumentRouteSet 是一类业务单据（入库 / 出库）的全部路由处理函数。
@@ -85,6 +88,20 @@ type FinanceRouteSet struct {
 	Create gin.HandlerFunc
 	List   gin.HandlerFunc
 	Revoke gin.HandlerFunc
+}
+
+// ReportRouteSet 是后台汇总统计的全部路由处理函数。
+//
+// 查询与「生成总结算」放在同一个结构里而不是拆成两组：两者共用 report.view 权限，
+// 拆开只会让装配处多一层没有信息量的嵌套。
+type ReportRouteSet struct {
+	Overview       gin.HandlerFunc
+	InboundStats   gin.HandlerFunc
+	OutboundStats  gin.HandlerFunc
+	BusinessUsers  gin.HandlerFunc
+	CreateSnapshot gin.HandlerFunc
+	ListSnapshots  gin.HandlerFunc
+	GetSnapshot    gin.HandlerFunc
 }
 
 type RouterDependencies struct {
@@ -176,6 +193,18 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 
 	// 单据结清视图：一次返回该单据的已付 / 未付、已收 / 未收、已开票 / 开票状态与全部记录明细。
 	tenant.GET("/finance/statements/:document_id", deps.Routes.FinanceStatement)
+
+	// 后台汇总统计（FR-BACK-01 ~ FR-BACK-05）：看板、入库 / 出库统计、业务员利润与总结算快照。
+	// 这里不再单独挂权限中间件：汇总统计的可见范围是「全组」，整个接口就是 report.view 权限本身，
+	// 由服务层统一判定并返回 403，避免权限规则在路由层与服务层各写一份。
+	reports := tenant.Group("/reports")
+	reports.GET("/overview", deps.Routes.Reports.Overview)
+	reports.GET("/inbound-stats", deps.Routes.Reports.InboundStats)
+	reports.GET("/outbound-stats", deps.Routes.Reports.OutboundStats)
+	reports.GET("/business-users", deps.Routes.Reports.BusinessUsers)
+	reports.POST("/summary-settlements", deps.Routes.Reports.CreateSnapshot)
+	reports.GET("/summary-settlements", deps.Routes.Reports.ListSnapshots)
+	reports.GET("/summary-settlements/:snapshot_id", deps.Routes.Reports.GetSnapshot)
 	return router
 }
 

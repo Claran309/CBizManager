@@ -26,6 +26,7 @@ import (
 	"CBizDocsManager/backend/internal/member"
 	"CBizDocsManager/backend/internal/organization"
 	"CBizDocsManager/backend/internal/platform"
+	"CBizDocsManager/backend/internal/reporting"
 	"CBizDocsManager/backend/internal/settlement"
 	"CBizDocsManager/backend/migrations"
 	"CBizDocsManager/backend/pkg/config"
@@ -111,6 +112,7 @@ func run(ctx context.Context, configPath string) error {
 	documentService := document.NewService(document.NewRepository(db), authorizer)
 	settlementService := settlement.NewService(settlement.NewRepository(db), authorizer)
 	financeService := finance.NewService(finance.NewRepository(db), authorizer)
+	reportingService := reporting.NewService(reporting.NewRepository(db), authorizer)
 
 	created, err := identityService.BootstrapPlatformAdmin(startupCtx, cfg.Bootstrap.AdminUsername, cfg.Bootstrap.AdminPassword)
 	if err != nil {
@@ -139,6 +141,8 @@ func run(ctx context.Context, configPath string) error {
 	paymentHandler := finance.NewHandler(financeService, finance.KindPayment)
 	receiptHandler := finance.NewHandler(financeService, finance.KindReceipt)
 	invoiceHandler := finance.NewHandler(financeService, finance.KindInvoice)
+	// 汇总统计只有一个 Handler：看板、统计表与总结算快照共用一套权限规则，不需要按类型分叉。
+	reportHandler := reporting.NewHandler(reportingService)
 	router := httpserver.NewRouter(httpserver.RouterDependencies{
 		Logger:        logger,
 		CORS:          cfg.CORS,
@@ -184,6 +188,12 @@ func run(ctx context.Context, configPath string) error {
 				Create: invoiceHandler.Create, List: invoiceHandler.List, Revoke: invoiceHandler.Revoke,
 			},
 			FinanceStatement: paymentHandler.Statement,
+			Reports: httpserver.ReportRouteSet{
+				Overview: reportHandler.Overview, InboundStats: reportHandler.InboundStats,
+				OutboundStats: reportHandler.OutboundStats, BusinessUsers: reportHandler.BusinessUsers,
+				CreateSnapshot: reportHandler.CreateSnapshots, ListSnapshots: reportHandler.ListSnapshots,
+				GetSnapshot: reportHandler.GetSnapshot,
+			},
 		},
 	})
 
