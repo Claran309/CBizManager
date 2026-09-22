@@ -91,6 +91,12 @@ func MonthStart(at time.Time) time.Time {
 // FormatMonth 把时刻格式化成「YYYY-MM」。
 func FormatMonth(at time.Time) string { return at.Format("2006-01") }
 
+// FormatMonthCompact 把时刻格式化成紧凑的「YYYYMM」。
+//
+// 结算单号是「JS202609-0003」这种不带分隔符的形式，用它拼接月份才不会出现
+// 单号里混进 "-" 导致前缀解析（sequenceFromSettlementNo）无法对齐的问题。
+func FormatMonthCompact(at time.Time) string { return at.Format("200601") }
+
 // atoiOrZero 把字符串转成整数，失败时返回 0（由调用方做范围校验）。
 func atoiOrZero(raw string) int {
 	value, err := strconv.Atoi(strings.TrimSpace(raw))

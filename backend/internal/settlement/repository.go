@@ -64,8 +64,8 @@ func (r *gormRepository) tryCreateSettlement(ctx context.Context, input CreateIn
 			return err
 		}
 
-		// 3) 生成当月结算单号。
-		month := bizdate.FormatMonth(input.Now)
+		// 3) 生成当月结算单号（月份用紧凑的 YYYYMM，单号形如 JS202609-0003）。
+		month := bizdate.FormatMonthCompact(input.Now)
 		sequence, err := nextSettlementSequence(tx, input.GroupID, month)
 		if err != nil {
 			return err
@@ -76,6 +76,10 @@ func (r *gormRepository) tryCreateSettlement(ctx context.Context, input CreateIn
 			InboundTotal: input.InboundTotal, OutboundTotal: input.OutboundTotal, GrossProfit: input.GrossProfit,
 			SourceCount: len(input.Sources), Version: 1,
 			CreatedBy: input.OperatorUserID, UpdatedBy: input.OperatorUserID,
+			// 显式使用注入时钟而不是让 GORM 取墙上时间：单号由 input.Now 决定月份，
+			// 列表又按 created_at 过滤月份，两者若各取一套时间，跨月瞬间会出现
+			// 「单号是 10 月、列表却归到 9 月」的错位。
+			CreatedAt: input.Now, UpdatedAt: input.Now,
 		}
 		if err := tx.Create(&settlement).Error; err != nil {
 			if errors.Is(err, gorm.ErrDuplicatedKey) {
@@ -91,6 +95,7 @@ func (r *gormRepository) tryCreateSettlement(ctx context.Context, input CreateIn
 				GroupID: input.GroupID, SettlementID: settlement.ID, DocumentID: snapshot.DocumentID,
 				Kind: snapshot.Kind, DocumentNo: snapshot.DocumentNo, BusinessUserID: snapshot.BusinessUserID,
 				BusinessDate: snapshot.BusinessDate, Amount: snapshot.Amount, ActiveDocumentID: &documentID,
+				CreatedAt: input.Now,
 			}
 			if err := tx.Create(&source).Error; err != nil {
 				// 唯一索引冲突说明另一笔并发申请抢先占用了同一张源单据。
