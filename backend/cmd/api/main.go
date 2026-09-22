@@ -25,6 +25,7 @@ import (
 	"CBizDocsManager/backend/internal/member"
 	"CBizDocsManager/backend/internal/organization"
 	"CBizDocsManager/backend/internal/platform"
+	"CBizDocsManager/backend/internal/settlement"
 	"CBizDocsManager/backend/migrations"
 	"CBizDocsManager/backend/pkg/config"
 	jwtmanager "CBizDocsManager/backend/pkg/jwt"
@@ -107,6 +108,7 @@ func run(ctx context.Context, configPath string) error {
 	memberService := member.NewService(member.NewRepository(db), authorizer)
 	dictionaryService := dictionary.NewService(dictionary.NewRepository(db), authorizer)
 	documentService := document.NewService(document.NewRepository(db), authorizer)
+	settlementService := settlement.NewService(settlement.NewRepository(db), authorizer)
 
 	created, err := identityService.BootstrapPlatformAdmin(startupCtx, cfg.Bootstrap.AdminUsername, cfg.Bootstrap.AdminPassword)
 	if err != nil {
@@ -129,6 +131,7 @@ func run(ctx context.Context, configPath string) error {
 	// 入库与出库共用同一套单据服务，只在构造 Handler 时区分 kind。
 	inboundHandler := document.NewHandler(documentService, document.KindInbound)
 	outboundHandler := document.NewHandler(documentService, document.KindOutbound)
+	settlementHandler := settlement.NewHandler(settlementService)
 	router := httpserver.NewRouter(httpserver.RouterDependencies{
 		Logger:        logger,
 		CORS:          cfg.CORS,
@@ -159,6 +162,10 @@ func run(ctx context.Context, configPath string) error {
 				Create: outboundHandler.Create, List: outboundHandler.List, Get: outboundHandler.Get,
 				Update: outboundHandler.Update, Submit: outboundHandler.Submit, Void: outboundHandler.Void,
 				MonthlySummary: outboundHandler.MonthlySummary,
+			},
+			Settlements: httpserver.SettlementRouteSet{
+				Create: settlementHandler.Create, List: settlementHandler.List, Get: settlementHandler.Get,
+				Approve: settlementHandler.Approve, Reject: settlementHandler.Reject,
 			},
 		},
 	})

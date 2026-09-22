@@ -35,6 +35,11 @@ const (
 	CodeDocumentStatusInvalid        = "DOCUMENT_STATUS_INVALID"
 	CodeDocumentIncomplete           = "DOCUMENT_INCOMPLETE"
 	CodeIdempotencyKeyReused         = "IDEMPOTENCY_KEY_REUSED"
+	CodeSettlementNotFound           = "SETTLEMENT_NOT_FOUND"
+	CodeSettlementStatusInvalid      = "SETTLEMENT_STATUS_INVALID"
+	CodeSettlementSourceInvalid      = "SETTLEMENT_SOURCE_INVALID"
+	CodeSettlementSourceConflict     = "SETTLEMENT_SOURCE_CONFLICT"
+	CodeSettlementRemarkRequired     = "SETTLEMENT_REMARK_REQUIRED"
 	CodeResourceVersionConflict      = "RESOURCE_VERSION_CONFLICT"
 	CodeCSRFInvalid                  = "CSRF_INVALID"
 	CodeOriginForbidden              = "ORIGIN_FORBIDDEN"
@@ -140,6 +145,12 @@ var (
 	ErrDocumentStatusInvalid = New(CodeDocumentStatusInvalid, "当前单据状态不允许此操作", http.StatusConflict)
 	ErrDocumentIncomplete    = New(CodeDocumentIncomplete, "单据内容不完整，无法提交", http.StatusBadRequest)
 	ErrIdempotencyKeyReused  = New(CodeIdempotencyKeyReused, "幂等键已被用于其他请求", http.StatusConflict)
+
+	ErrSettlementNotFound       = New(CodeSettlementNotFound, "结算单不存在", http.StatusNotFound)
+	ErrSettlementStatusInvalid  = New(CodeSettlementStatusInvalid, "当前结算单状态不允许此操作", http.StatusConflict)
+	ErrSettlementSourceInvalid  = New(CodeSettlementSourceInvalid, "源单据不允许参与结算", http.StatusBadRequest)
+	ErrSettlementSourceConflict = New(CodeSettlementSourceConflict, "源单据已被其他有效结算单引用", http.StatusConflict)
+	ErrSettlementRemarkRequired = New(CodeSettlementRemarkRequired, "驳回结算单必须填写原因", http.StatusBadRequest)
 
 	ErrResourceVersionConflict = New(CodeResourceVersionConflict, "资源已被其他请求修改", http.StatusConflict)
 

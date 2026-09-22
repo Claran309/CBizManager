@@ -47,6 +47,7 @@ type RouteHandlers struct {
 	ChangeDictionaryStatus   gin.HandlerFunc
 	InboundDocuments         DocumentRouteSet
 	OutboundDocuments        DocumentRouteSet
+	Settlements              SettlementRouteSet
 }
 
 // DocumentRouteSet 是一类业务单据（入库 / 出库）的全部路由处理函数。
@@ -59,6 +60,15 @@ type DocumentRouteSet struct {
 	Submit         gin.HandlerFunc
 	Void           gin.HandlerFunc
 	MonthlySummary gin.HandlerFunc
+}
+
+// SettlementRouteSet 是结算单的全部路由处理函数（申请与单级审批）。
+type SettlementRouteSet struct {
+	Create  gin.HandlerFunc
+	List    gin.HandlerFunc
+	Get     gin.HandlerFunc
+	Approve gin.HandlerFunc
+	Reject  gin.HandlerFunc
 }
 
 type RouterDependencies struct {
@@ -132,6 +142,15 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	// 业务单据：入库单与出库单共用同一套子路由结构。数据范围（本人 / 全组）由服务层按权限收敛。
 	registerDocumentRoutes(tenant, "/inbound-documents", deps.Routes.InboundDocuments)
 	registerDocumentRoutes(tenant, "/outbound-documents", deps.Routes.OutboundDocuments)
+
+	// 结算单：业务员申请 + 后台单级审批。审批资格由服务层按 settlement.approve 权限收敛，
+	// 数据范围（本人结算单 / 全组结算单）按 document.view_others 收敛。
+	settlements := tenant.Group("/settlements")
+	settlements.POST("", deps.Routes.Settlements.Create)
+	settlements.GET("", deps.Routes.Settlements.List)
+	settlements.GET("/:settlement_id", deps.Routes.Settlements.Get)
+	settlements.POST("/:settlement_id/approve", deps.Routes.Settlements.Approve)
+	settlements.POST("/:settlement_id/reject", deps.Routes.Settlements.Reject)
 	return router
 }
 

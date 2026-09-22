@@ -37,9 +37,12 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 		"GET /api/v1/inbound-documents/monthly-summary",
 		"GET /api/v1/outbound-documents", "GET /api/v1/outbound-documents/:document_id",
 		"GET /api/v1/outbound-documents/monthly-summary",
+		"GET /api/v1/settlements", "GET /api/v1/settlements/:settlement_id",
 		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
 		"POST /api/v1/auth/register", "POST /api/v1/auth/web/login", "POST /api/v1/auth/web/logout", "POST /api/v1/auth/web/refresh",
 		"POST /api/v1/groups/invitations", "POST /api/v1/platform/groups", "POST /api/v1/dictionaries",
+		"POST /api/v1/settlements",
+		"POST /api/v1/settlements/:settlement_id/approve", "POST /api/v1/settlements/:settlement_id/reject",
 		"POST /api/v1/groups/invitations/:invitation_id/secret", "POST /api/v1/groups/invitations/:invitation_id/revoke",
 		"POST /api/v1/inbound-documents", "POST /api/v1/inbound-documents/:document_id/submit",
 		"POST /api/v1/inbound-documents/:document_id/void",
@@ -136,6 +139,9 @@ func noOpRouteHandlers() RouteHandlers {
 		Create: noContent, List: noContent, Get: noContent, Update: noContent,
 		Submit: noContent, Void: noContent, MonthlySummary: noContent,
 	}
+	settlementRoutes := SettlementRouteSet{
+		Create: noContent, List: noContent, Get: noContent, Approve: noContent, Reject: noContent,
+	}
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
@@ -146,5 +152,6 @@ func noOpRouteHandlers() RouteHandlers {
 		ReplaceMemberPermissions: noContent, PermissionCatalog: noContent,
 		ListDictionaries: noContent, CreateDictionary: noContent, UpdateDictionary: noContent, ChangeDictionaryStatus: noContent,
 		InboundDocuments: documentRoutes, OutboundDocuments: documentRoutes,
+		Settlements: settlementRoutes,
 	}
 }
