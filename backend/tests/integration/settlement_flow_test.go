@@ -93,14 +93,15 @@ func TestSettlementApprovalFlow(t *testing.T) {
 	/* ---------------- 1. 准备源单据：三张已提交 + 一张草稿 ---------------- */
 
 	inboundOwner := createSubmittedDocument(t, ctx, documentService, ownerPrincipal,
-		document.KindInbound, businessDate, "北京钢铁贸易有限公司", "40", "2500", "src-in-owner")
+		document.KindInbound, businessDate, "北京钢铁贸易有限公司", "40", "2500", nil, "src-in-owner")
 	outboundOwner := createSubmittedDocument(t, ctx, documentService, ownerPrincipal,
-		document.KindOutbound, businessDate, "天津建筑集团", "60", "3000", "src-out-owner")
+		document.KindOutbound, businessDate, "天津建筑集团", "60", "3000",
+		saleAmountTypePointer(document.SaleAmountVATSpecial), "src-out-owner")
 	inboundMember := createSubmittedDocument(t, ctx, documentService, memberPrincipal,
-		document.KindInbound, businessDate, "河北钢材市场", "25", "2000", "src-in-member")
+		document.KindInbound, businessDate, "河北钢材市场", "25", "2000", nil, "src-in-member")
 	// 稍后用于「驳回释放后重新结算」，先备好一张空闲单据。
 	inboundReusable := createSubmittedDocument(t, ctx, documentService, ownerPrincipal,
-		document.KindInbound, businessDate, "河北钢材市场", "14", "5000", "src-in-reusable")
+		document.KindInbound, businessDate, "河北钢材市场", "14", "5000", nil, "src-in-reusable")
 
 	// 草稿单不允许参与结算：金额还没定，结算快照会变成「当时的中间态」。
 	draftDoc, err := documentService.Create(ctx, ownerPrincipal, document.KindInbound, document.CreateRequest{
@@ -377,18 +378,25 @@ func TestSettlementApprovalFlow(t *testing.T) {
 	}
 }
 
-// createSubmittedDocument 造一张金额确定的单据并提交，供结算引用。
+// createSubmittedDocument 造一张金额确定的单据并提交，供结算 / 汇总引用。
+//
+// 出库单在提交时必须带销售金额类型（validateCompleteness 会返回 DOCUMENT_INCOMPLETE），
+// 因此这里额外接收 saleAmountType：入库单传 nil，出库单必须传一个合法类型。
+// 之前漏了这一项，导致所有「出库单 + 提交」的集成测试实际上都跑不过。
 func createSubmittedDocument(
 	t *testing.T,
 	ctx context.Context,
 	service *document.Service,
 	principal identity.Principal,
 	kind document.Kind,
-	businessDate, partyName, quantity, unitPrice, idempotencyKey string,
+	businessDate, partyName, quantity, unitPrice string,
+	saleAmountType *document.SaleAmountType,
+	idempotencyKey string,
 ) *document.DocumentData {
 	t.Helper()
 	created, err := service.Create(ctx, principal, kind, document.CreateRequest{
 		Status: document.StatusDraft, BusinessDate: businessDate,
+		SaleAmountType: saleAmountType,
 		Parties: []document.PartyRequest{{
 			PartyName: partyName,
 			Items: []document.ItemRequest{{
@@ -408,6 +416,11 @@ func createSubmittedDocument(
 		t.Fatalf("submitted status = %q", submitted.Status)
 	}
 	return submitted
+}
+
+// saleAmountTypePointer 返回销售金额类型的指针，便于传给出库单创建请求。
+func saleAmountTypePointer(value document.SaleAmountType) *document.SaleAmountType {
+	return &value
 }
 
 // settlementNumber 按「JS + 当月年月 + 4 位序号」拼出期望单号。

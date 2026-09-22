@@ -115,11 +115,12 @@ func TestFinanceRecordFlow(t *testing.T) {
 	/* ---------------- 1. 准备单据：主账号入库 / 出库、业务员入库、一张草稿 ---------------- */
 
 	inbound := createSubmittedDocument(t, ctx, documentService, ownerPrincipal,
-		document.KindInbound, businessDate, "北京钢铁贸易有限公司", "40", "2500", "fin-src-in")
+		document.KindInbound, businessDate, "北京钢铁贸易有限公司", "40", "2500", nil, "fin-src-in")
 	outbound := createSubmittedDocument(t, ctx, documentService, ownerPrincipal,
-		document.KindOutbound, businessDate, "天津建筑集团", "60", "3000", "fin-src-out")
+		document.KindOutbound, businessDate, "天津建筑集团", "60", "3000",
+		saleAmountTypePointer(document.SaleAmountVATSpecial), "fin-src-out")
 	memberInbound := createSubmittedDocument(t, ctx, documentService, memberPrincipal,
-		document.KindInbound, businessDate, "河北钢材市场", "25", "2000", "fin-src-in-member")
+		document.KindInbound, businessDate, "河北钢材市场", "25", "2000", nil, "fin-src-in-member")
 
 	draft, err := documentService.Create(ctx, ownerPrincipal, document.KindInbound, document.CreateRequest{
 		Status: document.StatusDraft, BusinessDate: businessDate,
