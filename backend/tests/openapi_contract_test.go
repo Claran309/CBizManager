@@ -66,6 +66,11 @@ func TestOpenAPIContract(t *testing.T) {
 		{method: http.MethodPut, path: "/api/v1/outbound-documents/{document_id}"},
 		{method: http.MethodPost, path: "/api/v1/outbound-documents/{document_id}/submit"},
 		{method: http.MethodPost, path: "/api/v1/outbound-documents/{document_id}/void"},
+		{method: http.MethodPost, path: "/api/v1/settlements"},
+		{method: http.MethodGet, path: "/api/v1/settlements"},
+		{method: http.MethodGet, path: "/api/v1/settlements/{settlement_id}"},
+		{method: http.MethodPost, path: "/api/v1/settlements/{settlement_id}/approve"},
+		{method: http.MethodPost, path: "/api/v1/settlements/{settlement_id}/reject"},
 		{method: http.MethodGet, path: "/health/live"},
 		{method: http.MethodGet, path: "/health/ready"},
 	}
@@ -161,6 +166,11 @@ func TestOpenAPIContract(t *testing.T) {
 		"DOCUMENT_NOT_FOUND",
 		"DOCUMENT_STATUS_INVALID",
 		"DOCUMENT_INCOMPLETE",
+		"SETTLEMENT_NOT_FOUND",
+		"SETTLEMENT_STATUS_INVALID",
+		"SETTLEMENT_SOURCE_INVALID",
+		"SETTLEMENT_SOURCE_CONFLICT",
+		"SETTLEMENT_REMARK_REQUIRED",
 		"IDEMPOTENCY_KEY_REUSED",
 		"RESOURCE_VERSION_CONFLICT",
 		"CSRF_INVALID",
@@ -265,6 +275,127 @@ func TestOpenAPIContractDocuments(t *testing.T) {
 	if detail.Put.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
 		t.Error("PUT /api/v1/outbound-documents/{document_id} must declare Idempotency-Key header")
 	}
+}
+
+// TestOpenAPIContractSettlements 锁定结算与审批契约的关键约定：
+// 枚举取值、必填字段、幂等键请求头与结算单 ID 路径参数。
+func TestOpenAPIContractSettlements(t *testing.T) {
+	contractPath := filepath.Join("..", "..", "api", "openapi", "cbizdocsmanager-v1.yaml")
+	doc, err := openapi3.NewLoader().LoadFromFile(contractPath)
+	if err != nil {
+		t.Fatalf("load OpenAPI contract %q: %v", contractPath, err)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("validate OpenAPI contract: %v", err)
+	}
+
+	assertTopLevelEnum(t, requireSchema(t, doc, "SettlementStatus"), []string{"pending", "approved", "rejected"})
+	assertTopLevelEnum(t, requireSchema(t, doc, "SettlementAction"), []string{"submitted", "approved", "rejected"})
+
+	settlementData := requireSchema(t, doc, "SettlementData")
+	for _, property := range []string{
+		"settlement_id", "settlement_no", "status", "requester", "inbound_total", "outbound_total",
+		"gross_profit", "source_count", "inbound_total_upper", "outbound_total_upper",
+		"gross_profit_upper", "version", "sources", "approval_records",
+	} {
+		if !containsString(settlementData.Required, property) {
+			t.Errorf("SettlementData must require property %q", property)
+		}
+	}
+
+	summaryData := requireSchema(t, doc, "SettlementSummaryData")
+	for _, property := range []string{
+		"settlement_id", "settlement_no", "status", "requester", "inbound_total",
+		"outbound_total", "gross_profit", "source_count", "version",
+	} {
+		if !containsString(summaryData.Required, property) {
+			t.Errorf("SettlementSummaryData must require property %q", property)
+		}
+	}
+
+	sourceData := requireSchema(t, doc, "SettlementSourceData")
+	for _, property := range []string{"document_id", "kind", "document_no", "business_user", "business_date", "amount", "released"} {
+		if !containsString(sourceData.Required, property) {
+			t.Errorf("SettlementSourceData must require property %q", property)
+		}
+	}
+
+	// 列表行与详情行的人员摘要都必须是完整的用户对象，不能只回填姓名，
+	// 否则客户端按 UserSummary.account_type 枚举校验时会被空串卡住。
+	for _, schemaName := range []string{"SettlementData", "SettlementSummaryData"} {
+		schema := requireSchema(t, doc, schemaName)
+		requesterRef, ok := schema.Properties["requester"]
+		if !ok || requesterRef == nil || requesterRef.Ref == "" {
+			t.Errorf("%s.requester must reference UserSummary", schemaName)
+		}
+	}
+	if summaryData.Properties["requester"].Ref != "#/components/schemas/UserSummary" {
+		t.Errorf("SettlementSummaryData.requester ref = %q", summaryData.Properties["requester"].Ref)
+	}
+
+	createRequest := requireSchema(t, doc, "CreateSettlementRequest")
+	if !containsString(createRequest.Required, "sources") {
+		t.Error("CreateSettlementRequest must require property \"sources\"")
+	}
+	decideRequest := requireSchema(t, doc, "DecideSettlementRequest")
+	if !containsString(decideRequest.Required, "version") {
+		t.Error("DecideSettlementRequest must require property \"version\"")
+	}
+
+	create := doc.Paths.Find("/api/v1/settlements")
+	if create == nil || create.Post == nil {
+		t.Fatal("missing operation POST /api/v1/settlements")
+	}
+	if create.Post.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
+		t.Error("POST /api/v1/settlements must declare Idempotency-Key header")
+	}
+
+	approve := doc.Paths.Find("/api/v1/settlements/{settlement_id}/approve")
+	if approve == nil || approve.Post == nil {
+		t.Fatal("missing operation POST /api/v1/settlements/{settlement_id}/approve")
+	}
+	if approve.Post.Parameters.GetByInAndName("path", "settlement_id") == nil {
+		t.Error("POST /api/v1/settlements/{settlement_id}/approve must declare settlement_id path parameter")
+	}
+	// 重复审批是单级审批的核心冲突分支，契约必须显式声明，客户端才能据此提示状态已变更。
+	if !operationDeclaresErrorCode(approve.Post, "SETTLEMENT_STATUS_INVALID") {
+		t.Error("POST /api/v1/settlements/{settlement_id}/approve must declare SETTLEMENT_STATUS_INVALID")
+	}
+
+	reject := doc.Paths.Find("/api/v1/settlements/{settlement_id}/reject")
+	if reject == nil || reject.Post == nil {
+		t.Fatal("missing operation POST /api/v1/settlements/{settlement_id}/reject")
+	}
+	// 驳回必须能表达「未填原因」这一分支，客户端才能区分该引导用户补填。
+	if !operationDeclaresErrorCode(reject.Post, "SETTLEMENT_REMARK_REQUIRED") {
+		t.Error("POST /api/v1/settlements/{settlement_id}/reject must declare SETTLEMENT_REMARK_REQUIRED")
+	}
+}
+
+// operationDeclaresErrorCode 检查某个操作是否在 4xx 响应的 x-error-codes 里声明了指定错误码。
+func operationDeclaresErrorCode(operation *openapi3.Operation, code string) bool {
+	if operation == nil || operation.Responses == nil {
+		return false
+	}
+	for _, responseRef := range operation.Responses.Map() {
+		if responseRef == nil || responseRef.Value == nil {
+			continue
+		}
+		raw, ok := responseRef.Value.Extensions["x-error-codes"]
+		if !ok {
+			continue
+		}
+		codes, ok := raw.([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range codes {
+			if value, ok := item.(string); ok && value == code {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func assertTopLevelEnum(t *testing.T, schema *openapi3.Schema, values []string) {

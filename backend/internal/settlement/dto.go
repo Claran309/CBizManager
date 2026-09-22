@@ -131,7 +131,7 @@ func toSettlementSummaryData(summary Summary) SettlementSummaryData {
 	return SettlementSummaryData{
 		SettlementID: summary.Settlement.ID, SettlementNo: summary.Settlement.SettlementNo,
 		Status:       summary.Settlement.Status,
-		Requester:    identity.UserSummary{ID: summary.RequesterUserID, DisplayName: summary.RequesterName},
+		Requester:    summary.Requester,
 		InboundTotal: summary.Settlement.InboundTotal, OutboundTotal: summary.Settlement.OutboundTotal,
 		GrossProfit: summary.Settlement.GrossProfit, SourceCount: summary.Settlement.SourceCount,
 		Version: summary.Settlement.Version, DecidedAt: summary.Settlement.DecidedAt,

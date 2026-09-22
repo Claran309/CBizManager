@@ -14,6 +14,8 @@ tags:
     description: 组内管理
   - name: Documents
     description: 入库单与出库单
+  - name: Settlements
+    description: 结算单与单级审批
   - name: Health
     description: 服务健康检查
 security:
@@ -2012,6 +2014,266 @@ paths:
                 $ref: '#/components/schemas/ErrorApiResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/settlements:
+    post:
+      tags: [Settlements]
+      operationId: createSettlement
+      summary: 提交结算申请
+      description: 勾选若干已提交的入库单与出库单，服务端按快照汇总进项合计、销售合计与毛利润，生成待审批结算单。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSettlementRequest'
+      responses:
+        '201':
+          description: 申请成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementApiResponse'
+        '400':
+          description: 请求参数错误或源单据不可结算（VALIDATION_FAILED / SETTLEMENT_SOURCE_INVALID）
+          x-error-codes: [VALIDATION_FAILED, SETTLEMENT_SOURCE_INVALID]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 源单据不在本人可见范围（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 源单据已被其他有效结算单引用，或幂等键被复用（SETTLEMENT_SOURCE_CONFLICT / IDEMPOTENCY_KEY_REUSED）
+          x-error-codes: [SETTLEMENT_SOURCE_CONFLICT, IDEMPOTENCY_KEY_REUSED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Settlements]
+      operationId: listSettlements
+      summary: 分页查询结算单
+      description: 子账号未持有 view_others 权限时，服务端强制只看本人结算单；显式查询他人直接拒绝。
+      parameters:
+        - name: keyword
+          in: query
+          description: 匹配结算单号
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/SettlementStatus'
+        - name: requester_user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: month
+          in: query
+          description: 形如 2026-09，按结算单创建月份过滤
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementPageApiResponse'
+        '400':
+          description: 查询参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 越权查询他人结算单（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/settlements/{settlement_id}:
+    get:
+      tags: [Settlements]
+      operationId: getSettlement
+      summary: 读取结算单详情
+      description: 返回金额快照、源单据明细与完整审批链路；三项金额都附服务端生成的人民币大写。
+      parameters:
+        - $ref: '#/components/parameters/SettlementIDPath'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementApiResponse'
+        '400':
+          description: 结算单 ID 非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 结算单不在本人数据范围（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 结算单不存在或不属于当前组（SETTLEMENT_NOT_FOUND）
+          x-error-codes: [SETTLEMENT_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/settlements/{settlement_id}/approve:
+    post:
+      tags: [Settlements]
+      operationId: approveSettlement
+      summary: 审批通过
+      description: 单级审批；通过与驳回都是终态，重复审批返回 SETTLEMENT_STATUS_INVALID。
+      parameters:
+        - $ref: '#/components/parameters/SettlementIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideSettlementRequest'
+      responses:
+        '200':
+          description: 审批成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 settlement.approve 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 结算单不存在或不属于当前组（SETTLEMENT_NOT_FOUND）
+          x-error-codes: [SETTLEMENT_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 已被审批过或版本冲突（SETTLEMENT_STATUS_INVALID / RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [SETTLEMENT_STATUS_INVALID, RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/settlements/{settlement_id}/reject:
+    post:
+      tags: [Settlements]
+      operationId: rejectSettlement
+      summary: 审批驳回
+      description: 驳回必须填写原因；驳回后释放源单据的活跃引用，业务员可改单后重新申请。
+      parameters:
+        - $ref: '#/components/parameters/SettlementIDPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecideSettlementRequest'
+      responses:
+        '200':
+          description: 驳回成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementApiResponse'
+        '400':
+          description: 未填写驳回原因或请求参数错误（SETTLEMENT_REMARK_REQUIRED / VALIDATION_FAILED）
+          x-error-codes: [SETTLEMENT_REMARK_REQUIRED, VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 settlement.approve 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 结算单不存在或不属于当前组（SETTLEMENT_NOT_FOUND）
+          x-error-codes: [SETTLEMENT_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 已被审批过或版本冲突（SETTLEMENT_STATUS_INVALID / RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [SETTLEMENT_STATUS_INVALID, RESOURCE_VERSION_CONFLICT]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /health/live:
     get:
       tags: [Health]
@@ -2107,6 +2369,15 @@ components:
         type: integer
         format: int64
         minimum: 1
+    SettlementIDPath:
+      name: settlement_id
+      in: path
+      required: true
+      description: 结算单主键 ID；超出当前账号数据范围时按「不存在」处理。
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
@@ -2195,6 +2466,11 @@ components:
         - DOCUMENT_NOT_FOUND
         - DOCUMENT_STATUS_INVALID
         - DOCUMENT_INCOMPLETE
+        - SETTLEMENT_NOT_FOUND
+        - SETTLEMENT_STATUS_INVALID
+        - SETTLEMENT_SOURCE_INVALID
+        - SETTLEMENT_SOURCE_CONFLICT
+        - SETTLEMENT_REMARK_REQUIRED
         - IDEMPOTENCY_KEY_REUSED
         - RESOURCE_VERSION_CONFLICT
         - CSRF_INVALID
@@ -3508,3 +3784,268 @@ components:
           format: int64
           minimum: 1
           description: 客户端持有的单据版本号，用于乐观锁校验。
+    SettlementStatus:
+      type: string
+      description: 结算单审批状态；一期只做单级审批，通过与驳回都是终态。
+      enum: [pending, approved, rejected]
+    SettlementAction:
+      type: string
+      description: 审批链路中的动作；业务员提交申请本身也会留下一条 submitted 记录。
+      enum: [submitted, approved, rejected]
+    SettlementSourceData:
+      type: object
+      additionalProperties: false
+      description: 结算单引用的源单据快照。金额取生成结算单时的值，源单据后续被改单或作废都不影响该快照。
+      required: [document_id, kind, document_no, business_user, business_date, amount, released]
+      properties:
+        document_id:
+          type: integer
+          format: int64
+          minimum: 1
+        kind:
+          $ref: '#/components/schemas/DocumentKind'
+        document_no:
+          type: string
+        business_user:
+          $ref: '#/components/schemas/UserSummary'
+        business_date:
+          type: string
+          format: date
+        amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+          description: 源单据金额定点字符串，精确到分。
+        released:
+          type: boolean
+          description: 该源单据是否已被释放；结算单被驳回后置为 true，此时可重新申请结算。
+    SettlementApprovalRecordData:
+      type: object
+      additionalProperties: false
+      description: 审批链路上的一条记录，只增不改。
+      required: [action, operator, created_at]
+      properties:
+        action:
+          $ref: '#/components/schemas/SettlementAction'
+        operator:
+          $ref: '#/components/schemas/UserSummary'
+        remark:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    SettlementData:
+      type: object
+      additionalProperties: false
+      description: 结算单详情。三项金额都附服务端生成的人民币大写，毛利润允许为负（形如「RMB负…」）。
+      required:
+        - settlement_id
+        - settlement_no
+        - status
+        - requester
+        - inbound_total
+        - outbound_total
+        - gross_profit
+        - source_count
+        - inbound_total_upper
+        - outbound_total_upper
+        - gross_profit_upper
+        - version
+        - created_at
+        - updated_at
+        - sources
+        - approval_records
+      properties:
+        settlement_id:
+          type: integer
+          format: int64
+          minimum: 1
+        settlement_no:
+          type: string
+          description: 结算单号，形如 JS + 年月 + 当月 4 位序号。
+        status:
+          $ref: '#/components/schemas/SettlementStatus'
+        requester:
+          $ref: '#/components/schemas/UserSummary'
+        remark:
+          type: string
+          nullable: true
+        inbound_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+          description: 源单据中入库单金额合计，定点字符串精确到分。
+        outbound_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+          description: 源单据中出库单金额合计。
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+          description: 毛利润 = 销售合计 − 进项合计，允许为负。
+        source_count:
+          type: integer
+          minimum: 1
+        inbound_total_upper:
+          type: string
+          description: 进项合计的人民币大写。
+        outbound_total_upper:
+          type: string
+        gross_profit_upper:
+          type: string
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 乐观锁版本号；审批时必须原样回传，否则返回 RESOURCE_VERSION_CONFLICT。
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        decided_by:
+          allOf:
+            - $ref: '#/components/schemas/UserSummary'
+          nullable: true
+        decision_remark:
+          type: string
+          nullable: true
+          description: 审批意见；驳回时必填。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementSourceData'
+        approval_records:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementApprovalRecordData'
+    SettlementSummaryData:
+      type: object
+      additionalProperties: false
+      description: 结算单列表行。
+      required:
+        - settlement_id
+        - settlement_no
+        - status
+        - requester
+        - inbound_total
+        - outbound_total
+        - gross_profit
+        - source_count
+        - version
+        - created_at
+        - updated_at
+      properties:
+        settlement_id:
+          type: integer
+          format: int64
+          minimum: 1
+        settlement_no:
+          type: string
+        status:
+          $ref: '#/components/schemas/SettlementStatus'
+        requester:
+          $ref: '#/components/schemas/UserSummary'
+        inbound_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        outbound_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        source_count:
+          type: integer
+          minimum: 1
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+        decision_remark:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SettlementPageData:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementSummaryData'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    SettlementApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SettlementData'
+    SettlementPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SettlementPageData'
+    SettlementSourceRequest:
+      type: object
+      additionalProperties: false
+      required: [document_id]
+      properties:
+        document_id:
+          type: integer
+          format: int64
+          minimum: 1
+    CreateSettlementRequest:
+      type: object
+      additionalProperties: false
+      required: [sources]
+      properties:
+        remark:
+          type: string
+          nullable: true
+        sources:
+          type: array
+          minItems: 1
+          description: 参与结算的源单据；必须都是本组已提交单据，且同一张不得重复出现。
+          items:
+            $ref: '#/components/schemas/SettlementSourceRequest'
+    DecideSettlementRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 客户端持有的结算单版本号，用于乐观锁校验。
+        remark:
+          type: string
+          nullable: true
+          description: 审批意见；驳回时必须填写（否则返回 SETTLEMENT_REMARK_REQUIRED）。

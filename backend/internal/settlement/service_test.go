@@ -228,10 +228,11 @@ func (r *fakeRepository) ListSettlements(_ context.Context, _ uint64, query Repo
 		if query.RequesterUserID != nil && detail.Settlement.RequesterUserID != *query.RequesterUserID {
 			continue
 		}
+		requester := r.users[detail.Settlement.RequesterUserID]
+		requester.ID = detail.Settlement.RequesterUserID
 		page.Items = append(page.Items, Summary{
-			Settlement:      detail.Settlement,
-			RequesterUserID: detail.Settlement.RequesterUserID,
-			RequesterName:   r.users[detail.Settlement.RequesterUserID].DisplayName,
+			Settlement: detail.Settlement,
+			Requester:  requester,
 		})
 	}
 	page.Total = int64(len(page.Items))

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"CBizDocsManager/backend/internal/document"
+	"CBizDocsManager/backend/internal/identity"
 	"CBizDocsManager/backend/pkg/money"
 )
 
@@ -167,9 +168,10 @@ type Page struct {
 
 // Summary 是列表行所需的结算单摘要。
 type Summary struct {
-	Settlement      Settlement
-	RequesterName   string
-	RequesterUserID uint64
+	Settlement Settlement
+	// Requester 是申请人摘要。这里带完整字段（用户名 / 账号类型）而不是只带姓名，
+	// 否则列表行会序列化出一个半填充的用户对象，客户端按契约校验账号类型枚举时会被空串卡住。
+	Requester identity.UserSummary
 }
 
 // Detail 是结算单详情聚合：主表 + 源单据快照 + 审批记录。

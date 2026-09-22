@@ -282,10 +282,10 @@ func (r *gormRepository) ListSettlements(ctx context.Context, groupID uint64, qu
 		return Page{}, err
 	}
 	for _, settlement := range settlements {
-		page.Items = append(page.Items, Summary{
-			Settlement: settlement, RequesterUserID: settlement.RequesterUserID,
-			RequesterName: users[settlement.RequesterUserID].DisplayName,
-		})
+		// users 里缺人时也要保留 ID，界面至少能显示「已注销用户」而不是空行。
+		requester := users[settlement.RequesterUserID]
+		requester.ID = settlement.RequesterUserID
+		page.Items = append(page.Items, Summary{Settlement: settlement, Requester: requester})
 	}
 	return page, nil
 }
