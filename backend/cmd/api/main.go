@@ -16,6 +16,7 @@ import (
 
 	"CBizDocsManager/backend/internal/authorization"
 	"CBizDocsManager/backend/internal/dictionary"
+	"CBizDocsManager/backend/internal/document"
 	"CBizDocsManager/backend/internal/identity"
 	"CBizDocsManager/backend/internal/infrastructure/cache"
 	"CBizDocsManager/backend/internal/infrastructure/cryptography"
@@ -105,6 +106,7 @@ func run(ctx context.Context, configPath string) error {
 	authorizer := authorization.NewAuthorizer(authorization.NewRepository(db))
 	memberService := member.NewService(member.NewRepository(db), authorizer)
 	dictionaryService := dictionary.NewService(dictionary.NewRepository(db), authorizer)
+	documentService := document.NewService(document.NewRepository(db), authorizer)
 
 	created, err := identityService.BootstrapPlatformAdmin(startupCtx, cfg.Bootstrap.AdminUsername, cfg.Bootstrap.AdminPassword)
 	if err != nil {
@@ -124,6 +126,9 @@ func run(ctx context.Context, configPath string) error {
 	organizationHandler := organization.NewHandler(organizationService)
 	memberHandler := member.NewHandler(memberService)
 	dictionaryHandler := dictionary.NewHandler(dictionaryService)
+	// 入库与出库共用同一套单据服务，只在构造 Handler 时区分 kind。
+	inboundHandler := document.NewHandler(documentService, document.KindInbound)
+	outboundHandler := document.NewHandler(documentService, document.KindOutbound)
 	router := httpserver.NewRouter(httpserver.RouterDependencies{
 		Logger:        logger,
 		CORS:          cfg.CORS,
@@ -145,6 +150,16 @@ func run(ctx context.Context, configPath string) error {
 			PermissionCatalog: memberHandler.PermissionCatalog,
 			ListDictionaries:  dictionaryHandler.List, CreateDictionary: dictionaryHandler.Create,
 			UpdateDictionary: dictionaryHandler.Update, ChangeDictionaryStatus: dictionaryHandler.ChangeStatus,
+			InboundDocuments: httpserver.DocumentRouteSet{
+				Create: inboundHandler.Create, List: inboundHandler.List, Get: inboundHandler.Get,
+				Update: inboundHandler.Update, Submit: inboundHandler.Submit, Void: inboundHandler.Void,
+				MonthlySummary: inboundHandler.MonthlySummary,
+			},
+			OutboundDocuments: httpserver.DocumentRouteSet{
+				Create: outboundHandler.Create, List: outboundHandler.List, Get: outboundHandler.Get,
+				Update: outboundHandler.Update, Submit: outboundHandler.Submit, Void: outboundHandler.Void,
+				MonthlySummary: outboundHandler.MonthlySummary,
+			},
 		},
 	})
 

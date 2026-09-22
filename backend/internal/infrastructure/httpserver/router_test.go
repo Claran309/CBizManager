@@ -33,14 +33,23 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 		"GET /api/v1/groups/permission-catalog", "GET /api/v1/dictionaries", "GET /health/live", "GET /health/ready",
 		"GET /api/v1/platform/groups", "GET /api/v1/platform/groups/:group_id",
 		"GET /api/v1/groups/invitations",
+		"GET /api/v1/inbound-documents", "GET /api/v1/inbound-documents/:document_id",
+		"GET /api/v1/inbound-documents/monthly-summary",
+		"GET /api/v1/outbound-documents", "GET /api/v1/outbound-documents/:document_id",
+		"GET /api/v1/outbound-documents/monthly-summary",
 		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
 		"POST /api/v1/auth/register", "POST /api/v1/auth/web/login", "POST /api/v1/auth/web/logout", "POST /api/v1/auth/web/refresh",
 		"POST /api/v1/groups/invitations", "POST /api/v1/platform/groups", "POST /api/v1/dictionaries",
 		"POST /api/v1/groups/invitations/:invitation_id/secret", "POST /api/v1/groups/invitations/:invitation_id/revoke",
+		"POST /api/v1/inbound-documents", "POST /api/v1/inbound-documents/:document_id/submit",
+		"POST /api/v1/inbound-documents/:document_id/void",
+		"POST /api/v1/outbound-documents", "POST /api/v1/outbound-documents/:document_id/submit",
+		"POST /api/v1/outbound-documents/:document_id/void",
 		"PATCH /api/v1/groups/members/:membership_id/status", "PATCH /api/v1/dictionaries/:dictionary_id/status",
 		"PATCH /api/v1/platform/groups/:group_id/status",
 		"PUT /api/v1/auth/password", "PUT /api/v1/groups/members/:membership_id/permissions", "PUT /api/v1/dictionaries/:dictionary_id",
 		"PUT /api/v1/platform/groups/:group_id/owner",
+		"PUT /api/v1/inbound-documents/:document_id", "PUT /api/v1/outbound-documents/:document_id",
 	}
 	sort.Strings(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -123,6 +132,10 @@ func (routerAuthenticator) Authenticate(context.Context, string) (*identity.Prin
 
 func noOpRouteHandlers() RouteHandlers {
 	noContent := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	documentRoutes := DocumentRouteSet{
+		Create: noContent, List: noContent, Get: noContent, Update: noContent,
+		Submit: noContent, Void: noContent, MonthlySummary: noContent,
+	}
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
@@ -132,5 +145,6 @@ func noOpRouteHandlers() RouteHandlers {
 		ListMembers: noContent, ChangeMemberStatus: noContent, GetMemberPermissions: noContent,
 		ReplaceMemberPermissions: noContent, PermissionCatalog: noContent,
 		ListDictionaries: noContent, CreateDictionary: noContent, UpdateDictionary: noContent, ChangeDictionaryStatus: noContent,
+		InboundDocuments: documentRoutes, OutboundDocuments: documentRoutes,
 	}
 }

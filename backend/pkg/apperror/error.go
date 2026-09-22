@@ -31,6 +31,10 @@ const (
 	CodeDictionaryNotFound           = "DICTIONARY_NOT_FOUND"
 	CodeDictionaryNameExists         = "DICTIONARY_NAME_EXISTS"
 	CodeDictionaryParentInvalid      = "DICTIONARY_PARENT_INVALID"
+	CodeDocumentNotFound             = "DOCUMENT_NOT_FOUND"
+	CodeDocumentStatusInvalid        = "DOCUMENT_STATUS_INVALID"
+	CodeDocumentIncomplete           = "DOCUMENT_INCOMPLETE"
+	CodeIdempotencyKeyReused         = "IDEMPOTENCY_KEY_REUSED"
 	CodeResourceVersionConflict      = "RESOURCE_VERSION_CONFLICT"
 	CodeCSRFInvalid                  = "CSRF_INVALID"
 	CodeOriginForbidden              = "ORIGIN_FORBIDDEN"
@@ -131,6 +135,12 @@ var (
 	ErrDictionaryNotFound      = New(CodeDictionaryNotFound, "字典条目不存在", http.StatusNotFound)
 	ErrDictionaryNameExists    = New(CodeDictionaryNameExists, "同一范围内的字典名称已存在", http.StatusConflict)
 	ErrDictionaryParentInvalid = New(CodeDictionaryParentInvalid, "字典父级无效", http.StatusBadRequest)
+
+	ErrDocumentNotFound      = New(CodeDocumentNotFound, "单据不存在", http.StatusNotFound)
+	ErrDocumentStatusInvalid = New(CodeDocumentStatusInvalid, "当前单据状态不允许此操作", http.StatusConflict)
+	ErrDocumentIncomplete    = New(CodeDocumentIncomplete, "单据内容不完整，无法提交", http.StatusBadRequest)
+	ErrIdempotencyKeyReused  = New(CodeIdempotencyKeyReused, "幂等键已被用于其他请求", http.StatusConflict)
+
 	ErrResourceVersionConflict = New(CodeResourceVersionConflict, "资源已被其他请求修改", http.StatusConflict)
 
 	ErrCSRFInvalid     = New(CodeCSRFInvalid, "CSRF 校验失败", http.StatusForbidden)

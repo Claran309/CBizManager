@@ -52,6 +52,20 @@ func TestOpenAPIContract(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/dictionaries"},
 		{method: http.MethodPut, path: "/api/v1/dictionaries/{dictionary_id}"},
 		{method: http.MethodPatch, path: "/api/v1/dictionaries/{dictionary_id}/status"},
+		{method: http.MethodPost, path: "/api/v1/inbound-documents"},
+		{method: http.MethodGet, path: "/api/v1/inbound-documents"},
+		{method: http.MethodGet, path: "/api/v1/inbound-documents/monthly-summary"},
+		{method: http.MethodGet, path: "/api/v1/inbound-documents/{document_id}"},
+		{method: http.MethodPut, path: "/api/v1/inbound-documents/{document_id}"},
+		{method: http.MethodPost, path: "/api/v1/inbound-documents/{document_id}/submit"},
+		{method: http.MethodPost, path: "/api/v1/inbound-documents/{document_id}/void"},
+		{method: http.MethodPost, path: "/api/v1/outbound-documents"},
+		{method: http.MethodGet, path: "/api/v1/outbound-documents"},
+		{method: http.MethodGet, path: "/api/v1/outbound-documents/monthly-summary"},
+		{method: http.MethodGet, path: "/api/v1/outbound-documents/{document_id}"},
+		{method: http.MethodPut, path: "/api/v1/outbound-documents/{document_id}"},
+		{method: http.MethodPost, path: "/api/v1/outbound-documents/{document_id}/submit"},
+		{method: http.MethodPost, path: "/api/v1/outbound-documents/{document_id}/void"},
 		{method: http.MethodGet, path: "/health/live"},
 		{method: http.MethodGet, path: "/health/ready"},
 	}
@@ -144,6 +158,10 @@ func TestOpenAPIContract(t *testing.T) {
 		"DICTIONARY_NOT_FOUND",
 		"DICTIONARY_NAME_EXISTS",
 		"DICTIONARY_PARENT_INVALID",
+		"DOCUMENT_NOT_FOUND",
+		"DOCUMENT_STATUS_INVALID",
+		"DOCUMENT_INCOMPLETE",
+		"IDEMPOTENCY_KEY_REUSED",
 		"RESOURCE_VERSION_CONFLICT",
 		"CSRF_INVALID",
 		"ORIGIN_FORBIDDEN",
@@ -173,6 +191,92 @@ func TestOpenAPIContract(t *testing.T) {
 	assertSchemaEnum(t, healthData, "status", []string{"ok", "unavailable"})
 	assertSchemaEnum(t, healthData, "mysql", []string{"up", "down"})
 	assertSchemaEnum(t, healthData, "redis", []string{"up", "down", "disabled"})
+}
+
+// TestOpenAPIContractDocuments 锁定入库/出库单据契约的关键约定：
+// 枚举取值、必填字段、幂等键请求头与单据 ID 路径参数。
+func TestOpenAPIContractDocuments(t *testing.T) {
+	contractPath := filepath.Join("..", "..", "api", "openapi", "cbizdocsmanager-v1.yaml")
+	doc, err := openapi3.NewLoader().LoadFromFile(contractPath)
+	if err != nil {
+		t.Fatalf("load OpenAPI contract %q: %v", contractPath, err)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("validate OpenAPI contract: %v", err)
+	}
+
+	assertTopLevelEnum(t, requireSchema(t, doc, "DocumentKind"), []string{"inbound", "outbound"})
+	assertTopLevelEnum(t, requireSchema(t, doc, "DocumentStatus"), []string{"draft", "submitted", "voided"})
+	assertTopLevelEnum(t, requireSchema(t, doc, "PriceTaxMode"), []string{"tax_included", "tax_excluded"})
+	assertTopLevelEnum(t, requireSchema(t, doc, "SaleAmountType"), []string{"Y-1", "y-N", "N"})
+
+	documentData := requireSchema(t, doc, "DocumentData")
+	for _, property := range []string{
+		"document_id", "kind", "document_no", "status", "business_user", "business_date",
+		"total_amount", "total_amount_upper", "version", "parties",
+	} {
+		if !containsString(documentData.Required, property) {
+			t.Errorf("DocumentData must require property %q", property)
+		}
+	}
+
+	summaryData := requireSchema(t, doc, "DocumentSummaryData")
+	for _, property := range []string{"document_id", "document_no", "status", "party_names", "item_count", "total_amount"} {
+		if !containsString(summaryData.Required, property) {
+			t.Errorf("DocumentSummaryData must require property %q", property)
+		}
+	}
+
+	monthlySummary := requireSchema(t, doc, "MonthlySummaryData")
+	for _, property := range []string{"month", "kind", "document_count", "draft_count", "submitted_count", "voided_count", "total_amount", "total_amount_upper", "parties"} {
+		if !containsString(monthlySummary.Required, property) {
+			t.Errorf("MonthlySummaryData must require property %q", property)
+		}
+	}
+
+	createRequest := requireSchema(t, doc, "CreateDocumentRequest")
+	for _, property := range []string{"status", "business_date", "parties"} {
+		if !containsString(createRequest.Required, property) {
+			t.Errorf("CreateDocumentRequest must require property %q", property)
+		}
+	}
+	updateRequest := requireSchema(t, doc, "UpdateDocumentRequest")
+	for _, property := range []string{"version", "status", "business_date", "parties"} {
+		if !containsString(updateRequest.Required, property) {
+			t.Errorf("UpdateDocumentRequest must require property %q", property)
+		}
+	}
+
+	create := doc.Paths.Find("/api/v1/inbound-documents")
+	if create == nil || create.Post == nil {
+		t.Fatal("missing operation POST /api/v1/inbound-documents")
+	}
+	if create.Post.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
+		t.Error("POST /api/v1/inbound-documents must declare Idempotency-Key header")
+	}
+
+	detail := doc.Paths.Find("/api/v1/outbound-documents/{document_id}")
+	if detail == nil || detail.Put == nil {
+		t.Fatal("missing operation PUT /api/v1/outbound-documents/{document_id}")
+	}
+	if detail.Put.Parameters.GetByInAndName("path", "document_id") == nil {
+		t.Error("PUT /api/v1/outbound-documents/{document_id} must declare document_id path parameter")
+	}
+	if detail.Put.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
+		t.Error("PUT /api/v1/outbound-documents/{document_id} must declare Idempotency-Key header")
+	}
+}
+
+func assertTopLevelEnum(t *testing.T, schema *openapi3.Schema, values []string) {
+	t.Helper()
+	if len(schema.Enum) != len(values) {
+		t.Errorf("enum = %#v, want exactly %#v", schema.Enum, values)
+	}
+	for _, value := range values {
+		if !containsEnumString(schema.Enum, value) {
+			t.Errorf("enum is missing %q", value)
+		}
+	}
 }
 
 func assertSchemaEnum(t *testing.T, schema *openapi3.Schema, property string, values []string) {

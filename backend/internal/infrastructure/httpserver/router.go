@@ -45,6 +45,20 @@ type RouteHandlers struct {
 	CreateDictionary         gin.HandlerFunc
 	UpdateDictionary         gin.HandlerFunc
 	ChangeDictionaryStatus   gin.HandlerFunc
+	InboundDocuments         DocumentRouteSet
+	OutboundDocuments        DocumentRouteSet
+}
+
+// DocumentRouteSet 是一类业务单据（入库 / 出库）的全部路由处理函数。
+// 两种单据的子路由结构完全一致，差异只在前缀与注入的 kind。
+type DocumentRouteSet struct {
+	Create         gin.HandlerFunc
+	List           gin.HandlerFunc
+	Get            gin.HandlerFunc
+	Update         gin.HandlerFunc
+	Submit         gin.HandlerFunc
+	Void           gin.HandlerFunc
+	MonthlySummary gin.HandlerFunc
 }
 
 type RouterDependencies struct {
@@ -114,7 +128,22 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	tenant.POST("/dictionaries", deps.Routes.CreateDictionary)
 	tenant.PUT("/dictionaries/:dictionary_id", deps.Routes.UpdateDictionary)
 	tenant.PATCH("/dictionaries/:dictionary_id/status", deps.Routes.ChangeDictionaryStatus)
+
+	// 业务单据：入库单与出库单共用同一套子路由结构。数据范围（本人 / 全组）由服务层按权限收敛。
+	registerDocumentRoutes(tenant, "/inbound-documents", deps.Routes.InboundDocuments)
+	registerDocumentRoutes(tenant, "/outbound-documents", deps.Routes.OutboundDocuments)
 	return router
+}
+
+func registerDocumentRoutes(group *gin.RouterGroup, prefix string, routes DocumentRouteSet) {
+	documents := group.Group(prefix)
+	documents.POST("", routes.Create)
+	documents.GET("", routes.List)
+	documents.GET("/monthly-summary", routes.MonthlySummary)
+	documents.GET("/:document_id", routes.Get)
+	documents.PUT("/:document_id", routes.Update)
+	documents.POST("/:document_id/submit", routes.Submit)
+	documents.POST("/:document_id/void", routes.Void)
 }
 
 func liveness(c *gin.Context) {
