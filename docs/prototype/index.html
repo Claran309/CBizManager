@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBizDocsManager 一期交互原型</title>
+<style>
+:root{
+  --bg:#f4f6f9; --panel:#ffffff; --panel-2:#fafbfc; --line:#e2e7ee; --line-strong:#cfd8e3;
+  --text:#1b2530; --text-2:#55606d; --text-3:#8b97a5;
+  --brand:#1f6feb; --brand-soft:#e8f1fe; --brand-deep:#1554b8;
+  --ok:#12855f; --ok-soft:#e6f6ef;
+  --warn:#b26a00; --warn-soft:#fdf3e2;
+  --danger:#c0392b; --danger-soft:#fdecea;
+  --info:#5b4bd6; --info-soft:#ece9fd;
+  --radius:10px; --radius-sm:7px;
+  --shadow:0 1px 2px rgba(20,35,55,.05),0 6px 18px rgba(20,35,55,.06);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a1f27; --panel-2:#20262f; --line:#2b323c; --line-strong:#3a434f;
+  --text:#e6ebf1; --text-2:#a8b3c0; --text-3:#78838f;
+  --brand:#4d92ff; --brand-soft:#1b2b45; --brand-deep:#7cb0ff;
+  --ok:#3ecf95; --ok-soft:#14302a;
+  --warn:#e3a94a; --warn-soft:#33280f;
+  --danger:#f0736a; --danger-soft:#3a1e1c;
+  --info:#a394ff; --info-soft:#241f42;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.32);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;
+  font-size:13.5px;line-height:1.62;-webkit-font-smoothing:antialiased}
+code,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.layout{display:grid;grid-template-columns:296px 1fr;min-height:100vh}
+.sidebar{background:var(--panel);border-right:1px solid var(--line);
+  position:sticky;top:0;height:100vh;overflow-y:auto;padding:18px 14px 40px}
+.brand{display:flex;align-items:center;gap:10px;padding:0 6px 16px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.brand .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+  color:#fff;display:grid;place-items:center;font-weight:700;font-size:15px;flex:none}
+.brand h1{margin:0;font-size:14px;letter-spacing:.2px}
+.brand p{margin:1px 0 0;font-size:11.5px;color:var(--text-3)}
+.nav-group{margin:0 0 16px}
+.nav-group>h2{margin:0 0 6px;padding:0 8px;font-size:11px;font-weight:600;color:var(--text-3);
+  letter-spacing:.09em;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;
+  color:var(--text-2);padding:7px 9px;border-radius:var(--radius-sm);cursor:pointer;font:inherit;font-size:13px}
+.nav-item:hover{background:var(--panel-2);color:var(--text)}
+.nav-item.active{background:var(--brand-soft);color:var(--brand-deep);font-weight:600}
+.nav-item .idx{flex:none;width:20px;height:20px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);
+  display:grid;place-items:center;font-size:10.5px;font-family:var(--mono);color:var(--text-3)}
+.nav-item.active .idx{background:var(--brand);border-color:var(--brand);color:#fff}
+.main{padding:22px 28px 70px;min-width:0}
+.topbar{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.topbar h2{margin:0;font-size:19px}
+.topbar .sub{margin:3px 0 0;color:var(--text-2);font-size:12.5px;max-width:860px}
+.topbar .spacer{flex:1}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--text-2);font:inherit;font-size:12px;padding:5px 11px;
+  border-radius:6px;cursor:pointer}
+.seg button.active{background:var(--brand);color:#fff}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:16px}
+.card>header{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.card>header h3{margin:0;font-size:13.5px}
+.card>header .hint{color:var(--text-3);font-size:11.5px}
+.card>header .spacer{flex:1}
+.card .body{padding:16px}
+.card .body.tight{padding:0}
+.grid{display:grid;gap:16px}
+@media(min-width:1180px){.grid.two{grid-template-columns:1fr 1fr}.grid.side{grid-template-columns:1fr 340px}}
+.note{background:var(--brand-soft);border:1px solid var(--brand);border-radius:var(--radius-sm);
+  padding:9px 12px;font-size:12.5px;color:var(--brand-deep);margin-bottom:14px}
+.note.plain{background:var(--panel-2);border-color:var(--line);color:var(--text-2)}
+.note.warn{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.note b{color:inherit}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel-2);color:var(--text-2);white-space:nowrap}
+.badge.ok{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.badge.warn{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.badge.danger{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.badge.brand{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-deep)}
+.badge.info{background:var(--info-soft);border-color:var(--info);color:var(--info)}
+button.btn{font:inherit;font-size:12.5px;padding:7px 14px;border-radius:8px;border:1px solid var(--line-strong);
+  background:var(--panel);color:var(--text);cursor:pointer}
+button.btn:hover{border-color:var(--brand);color:var(--brand-deep)}
+button.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+button.btn.primary:hover{background:var(--brand-deep);color:#fff}
+button.btn.danger{color:var(--danger);border-color:var(--danger)}
+button.btn.ghost{border-style:dashed;color:var(--text-2)}
+button.btn.sm{padding:4px 9px;font-size:11.5px}
+label.field{display:block;margin-bottom:11px}
+label.field>span{display:block;font-size:11.5px;color:var(--text-2);margin-bottom:4px}
+label.field>span .req{color:var(--danger)}
+input[type=text],input[type=password],input[type=number],select,textarea{
+  width:100%;padding:7px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--panel);
+  color:var(--text);font:inherit;font-size:13px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
+.row{display:grid;gap:12px}
+.row.c2{grid-template-columns:1fr 1fr}
+.row.c3{grid-template-columns:repeat(3,1fr)}
+.row.c4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:900px){.row.c3,.row.c4{grid-template-columns:1fr 1fr}}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
+th{background:var(--panel-2);color:var(--text-2);font-weight:600;font-size:11.5px;white-space:nowrap}
+td.num,th.num{text-align:right}
+tbody tr:hover{background:var(--panel-2)}
+tfoot td{background:var(--panel-2);font-weight:600}
+.table-wrap{overflow:auto;max-height:520px;border-top:1px solid var(--line)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px;margin:0}
+.kv dt{color:var(--text-2)}
+.kv dd{margin:0;text-align:right}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:13px 15px}
+.stat .k{font-size:11.5px;color:var(--text-2)}
+.stat .v{font-size:20px;font-weight:650;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .v.red{color:#c0392b}
+.stat .v.green{color:#12855f}
+html[data-theme="dark"] .stat .v.red{color:#f0736a}
+html[data-theme="dark"] .stat .v.green{color:#3ecf95}
+.stat .d{font-size:11px;color:var(--text-3);margin-top:2px}
+.stats{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:16px}
+.phone-wrap{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:378px;flex:none;background:var(--panel);border:1px solid var(--line-strong);border-radius:26px;
+  padding:12px;box-shadow:var(--shadow)}
+.phone .screen{background:var(--bg);border-radius:18px;overflow:hidden;border:1px solid var(--line)}
+.phone .status{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-3);
+  padding:7px 13px 5px;background:var(--panel)}
+.phone .appbar{display:flex;align-items:center;gap:9px;padding:9px 13px;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+.phone .appbar .back{font-size:17px;color:var(--text-2);cursor:pointer;line-height:1}
+.phone .appbar h4{margin:0;font-size:14px;flex:1}
+.phone .scroll{padding:11px;max-height:640px;overflow-y:auto}
+.phone .bottom-nav{display:flex;background:var(--panel);border-top:1px solid var(--line)}
+.phone .bottom-nav div{flex:1;text-align:center;padding:8px 2px;font-size:10.5px;color:var(--text-3);
+  border-top:2px solid transparent;cursor:pointer}
+.phone .bottom-nav div.active{color:var(--brand);border-top-color:var(--brand)}
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px;margin-bottom:10px}
+.mcard h5{margin:0 0 9px;font-size:12.5px;display:flex;align-items:center;gap:7px}
+.mcard h5 .spacer{flex:1}
+.mline{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3px 0}
+.mline .l{color:var(--text-2);flex:none}
+.mline .r{text-align:right;font-variant-numeric:tabular-nums}
+.mrow{border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px;margin-bottom:8px;background:var(--panel-2)}
+.mrow .head{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.mrow .head .n{width:19px;height:19px;border-radius:5px;background:var(--brand-soft);color:var(--brand-deep);
+  font-size:10.5px;display:grid;place-items:center;font-family:var(--mono);flex:none}
+.mrow .head .spacer{flex:1}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.mgrid.one{grid-template-columns:1fr}
+.mgrid label{font-size:11px;color:var(--text-2)}
+.mgrid input,.mgrid select{padding:5px 8px;font-size:12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line-strong);
+  background:var(--panel);color:var(--text-2);cursor:pointer}
+.chip.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.legend{font-size:11.5px;color:var(--text-3);margin-top:10px;display:flex;gap:14px;flex-wrap:wrap}
+.masked{font-family:var(--mono);letter-spacing:2px;background:var(--panel-2);padding:1px 6px;border-radius:5px}
+.section{display:none}
+.section.active{display:block}
+.flow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--text-2)}
+.flow .step{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+.flow .arrow{color:var(--text-3)}
+.perm-table input[type=checkbox]{width:15px;height:15px;accent-color:var(--brand)}
+.footnote{color:var(--text-3);font-size:11.5px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="logo">单</div>
+    <div>
+      <h1>CBizDocsManager</h1>
+      <p>钢材贸易单据管理 · 一期原型</p>
+    </div>
+  </div>
+  <div class="nav-group">
+    <h2>一 · 账户与认证</h2>
+    <button class="nav-item active" data-go="s-login"><span class="idx">01</span>登录</button>
+    <button class="nav-item" data-go="s-register"><span class="idx">02</span>邀请码注册</button>
+    <button class="nav-item" data-go="s-forcepw"><span class="idx">03</span>强制修改初始密码</button>
+  </div>
+  <div class="nav-group">
+    <h2>二 · 业务员端（Android）</h2>
+    <button class="nav-item" data-go="s-m-home"><span class="idx">04</span>移动首页 / 离线状态</button>
+    <button class="nav-item" data-go="s-m-in"><span class="idx">05</span>入库单填写（卡片式）</button>
+    <button class="nav-item" data-go="s-m-out"><span class="idx">06</span>出库单填写（卡片式）</button>
+    <button class="nav-item" data-go="s-m-history"><span class="idx">07</span>单据历史与同步</button>
+    <button class="nav-item" data-go="s-m-settle"><span class="idx">08</span>结算申请</button>
+  </div>
+  <div class="nav-group">
+    <h2>三 · 桌面宽表</h2>
+    <button class="nav-item" data-go="s-w-in"><span class="idx">09</span>入库单宽表</button>
+    <button class="nav-item" data-go="s-w-out"><span class="idx">10</span>出库单宽表</button>
+    <button class="nav-item" data-go="s-w-reports"><span class="idx">11</span>数据汇总</button>
+    <button class="nav-item" data-go="s-w-approve"><span class="idx">12</span>结算单生成与审批</button>
+    <button class="nav-item" data-go="s-w-finance"><span class="idx">13</span>付款 / 收款 / 开票</button>
+    <button class="nav-item" data-go="s-w-profit"><span class="idx">14</span>公司 / 业务员总结算</button>
+  </div>
+  <div class="nav-group">
+    <h2>四 · 组内管理（主账号）</h2>
+    <button class="nav-item" data-go="s-members"><span class="idx">15</span>成员管理</button>
+    <button class="nav-item" data-go="s-perms"><span class="idx">16</span>子账号权限配置</button>
+    <button class="nav-item" data-go="s-invite"><span class="idx">17</span>邀请码管理</button>
+    <button class="nav-item" data-go="s-dict"><span class="idx">18</span>辅助填写字典</button>
+  </div>
+  <div class="nav-group">
+    <h2>五 · 平台运营</h2>
+    <button class="nav-item" data-go="s-platform"><span class="idx">19</span>公司 / 组治理</button>
+  </div>
+  <div class="nav-group">
+    <h2>六 · 规则说明</h2>
+    <button class="nav-item" data-go="s-rules"><span class="idx">20</span>计算与状态规则</button>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <div>
+      <h2 id="pageTitle">01 · 登录</h2>
+      <p class="sub" id="pageSub"></p>
+    </div>
+    <div class="spacer"></div>
+    <div class="toolbar">
+      <div class="seg" id="themeSeg">
+        <button class="active" data-theme="light">浅色</button>
+        <button data-theme="dark">深色</button>
+      </div>
+    </div>
+  </div>
+
+<!-- ============ 01 登录 ============ -->
+<section class="section active" id="s-login"
+  data-title="01 · 登录" data-sub="账号密码登录。Access JWT 短时效，Refresh Token 可撤销并每次轮换；Android/Windows 存系统安全区，Web 走 HttpOnly Cookie。客户端不解析 JWT，身份一律以 /auth/me 为准。">
+  <div class="note">登录成功后后端返回 <code>must_change_password</code>；为 <code>true</code> 时客户端强制跳转改密页，改密前所有业务写接口都会被后端拦截。</div>
+  <div class="grid side">
+    <div class="card">
+      <header><h3>登录表单</h3><div class="spacer"></div><span class="badge">POST /api/v1/auth/login</span></header>
+      <div class="body">
+        <div class="row c2">
+          <label class="field"><span>账号 <b class="req">*</b></span><input type="text" value="group-owner-one"></label>
+          <label class="field"><span>密码 <b class="req">*</b></span><input type="password" value="password-placeholder"></label>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:4px">
+          <button class="btn primary">登录</button>
+          <button class="btn ghost" data-go="s-register">我有邀请码，去注册</button>
+        </div>
+        <div class="footnote">登录失败统一返回 <code>AUTH_INVALID_CREDENTIALS</code>，不区分「账号不存在」与「密码错误」，避免账号枚举。</div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>角色与落地首页</h3></header>
+      <div class="body">
+        <table>
+          <thead><tr><th>账号类型</th><th>登录后首页</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge info">platform_admin</span></td><td>平台治理 · 公司/组列表</td></tr>
+            <tr><td><span class="badge brand">group_owner</span></td><td>业务首页 + 组内管理全部入口</td></tr>
+            <tr><td><span class="badge">member</span></td><td>业务首页，入口按 permission_codes 渲染</td></tr>
+          </tbody>
+        </table>
+        <div class="footnote">平台运营人员 <b>不是</b> 组内成员，默认不拥有任何租户业务数据的查看权。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 02 注册 ============ -->
+<section class="section" id="s-register"
+  data-title="02 · 邀请码注册" data-sub="子账号不能自助注册，必须先拿到主账号签发的邀请码。注册成功即入组，默认只拥有「查看 / 编辑本人单据」的能力。">
+  <div class="note plain">邀请码明文只在「签发」与「查看」两次响应里出现，其余时间库中只有 AES-GCM 密文与校验哈希。</div>
+  <div class="grid side">
+    <div class="card">
+      <header><h3>注册表单</h3><div class="spacer"></div><span class="badge">POST /api/v1/auth/register</span></header>
+      <div class="body">
+        <label class="field"><span>邀请码 <b class="req">*</b></span><input type="text" class="num" value="invitation-code-placeholder"></label>
+        <div class="row c2">
+          <label class="field"><span>登录账号 <b class="req">*</b></span><input type="text" value="sales-wang"></label>
+          <label class="field"><span>姓名 / 展示名 <b class="req">*</b></span><input type="text" value="王业务"></label>
+        </div>
+        <label class="field"><span>密码（不少于 8 位）<b class="req">*</b></span><input type="password" value="password-placeholder"></label>
+        <button class="btn primary">完成注册并入组</button>
+        <div class="footnote">邀请码无效 / 过期 / 已使用分别返回 <code>INVITATION_INVALID</code>、<code>INVITATION_EXPIRED</code>、<code>INVITATION_USED</code>。并发使用同一邀请码时只有一个请求能成功。</div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>失败态提示</h3></header>
+      <div class="body">
+        <div class="note warn" style="margin-bottom:10px"><b>邀请码已使用</b> —— 该邀请码已被其他成员使用，请联系主账号重新签发。</div>
+        <div class="note warn" style="margin-bottom:10px"><b>邀请码已过期</b> —— 有效期 3 天，已于 2026-09-19 10:22 过期。</div>
+        <div class="note warn" style="margin-bottom:0"><b>账号已存在</b> —— 该登录账号已被占用，请更换。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 03 强制改密 ============ -->
+<section class="section" id="s-forcepw"
+  data-title="03 · 强制修改初始密码" data-sub="平台建组时创建的主账号、以及平台新建的主账号，初始密码都带 must_change_password 标记。登录后第一步必须改密。">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>在线</span></div>
+        <div class="appbar"><h4>修改初始密码</h4></div>
+        <div class="scroll">
+          <div class="note warn">为保障账号安全，请先修改初始密码。修改完成前无法使用任何业务功能。</div>
+          <div class="mcard">
+            <div class="mgrid one">
+              <label>当前密码</label><input type="password" value="password-placeholder">
+              <label>新密码（≥8 位）</label><input type="password" value="password-placeholder">
+              <label>确认新密码</label><input type="password" value="password-placeholder">
+            </div>
+            <div style="margin-top:11px"><button class="btn primary" style="width:100%">确认修改并进入系统</button></div>
+          </div>
+          <div class="footnote">改密成功后后端撤销该账号其余刷新会话；客户端清空本地缓存并重新拉取 /auth/me。</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <header><h3>后端拦截规则</h3></header>
+      <div class="body">
+        <table>
+          <thead><tr><th>接口</th><th>改密前行为</th></tr></thead>
+          <tbody>
+            <tr><td><code>/auth/me</code></td><td><span class="badge ok">放行</span> 需返回 must_change_password 供前端判断</td></tr>
+            <tr><td><code>/auth/password</code></td><td><span class="badge ok">放行</span> 唯一可调用的写接口</td></tr>
+            <tr><td><code>/groups/**</code>、<code>/platform/**</code>、<code>/dictionaries/**</code></td><td><span class="badge danger">拦截</span> 返回 AUTH_PASSWORD_CHANGE_REQUIRED</td></tr>
+            <tr><td>后续业务接口（入库 / 出库 / 结算）</td><td><span class="badge danger">拦截</span> 同上</td></tr>
+          </tbody>
+        </table>
+        <div class="footnote">这层拦截同时落在路由中间件与服务层：即使绕过路由，服务层也会再校验一次 <code>principal.MustChangePassword</code>。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 04 移动首页 ============ -->
+<section class="section" id="s-m-home"
+  data-title="04 · 业务员移动首页与离线状态" data-sub="Android 端首页：本月概览、四个高频入口、本地草稿的同步状态。列表全部卡片式，不照搬桌面宽表。">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>已断开 · 仅本地</span></div>
+        <div class="appbar"><h4>王业务 · 钢铁贸易一组</h4><span class="badge warn">离线</span></div>
+        <div class="scroll">
+          <div class="note warn" style="margin-bottom:11px">当前离线，2 张草稿已保存在本机，联网后自动同步。</div>
+          <div class="mcard">
+            <h5>本月概览 <span class="spacer"></span><span class="badge">2026-09</span></h5>
+            <div class="mline"><span class="l">入库单</span><span class="r">6 张 · ¥146,982.33</span></div>
+            <div class="mline"><span class="l">出库单</span><span class="r">8 张 · ¥173,540.00</span></div>
+            <div class="mline"><span class="l">待审批结算单</span><span class="r">2 张 <span class="badge warn">待审批</span></span></div>
+          </div>
+          <div class="mcard">
+            <h5>快速填写</h5>
+            <div class="mgrid">
+              <button class="btn primary" data-go="s-m-in">＋ 入库单</button>
+              <button class="btn primary" data-go="s-m-out">＋ 出库单</button>
+            </div>
+            <div class="mgrid" style="margin-top:7px">
+              <button class="btn" data-go="s-m-history">单据历史</button>
+              <button class="btn" data-go="s-m-settle">申请结算</button>
+            </div>
+          </div>
+          <div class="mcard">
+            <h5>待同步队列（2）</h5>
+            <div class="mrow">
+              <div class="head"><span class="n">1</span><b>入库单草稿 · 鑫源钢贸</b><span class="spacer"></span><span class="badge danger">同步失败</span></div>
+              <div class="mline"><span class="l">失败原因</span><span class="r">网络不可达（已重试 3 次）</span></div>
+              <div style="margin-top:8px;display:flex;gap:7px"><button class="btn sm">重试</button><button class="btn sm ghost">查看冲突</button></div>
+            </div>
+            <div class="mrow" style="margin-bottom:0">
+              <div class="head"><span class="n">2</span><b>出库单草稿 · 宏达建筑</b><span class="spacer"></span><span class="badge warn">待同步</span></div>
+              <div class="mline"><span class="l">保存于</span><span class="r">2026-09-22 09:12</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-nav"><div class="active">首页</div><div>填写</div><div>历史</div><div>我的</div></div>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <header><h3>离线与同步设计</h3></header>
+      <div class="body">
+        <div class="flow" style="margin-bottom:12px">
+          <span class="step">UI 提交</span><span class="arrow">→</span>
+          <span class="step">写入 SQLite 草稿</span><span class="arrow">→</span>
+          <span class="step">进入 Outbox 队列</span><span class="arrow">→</span>
+          <span class="step">带幂等键 POST</span><span class="arrow">→</span>
+          <span class="step">服务端落库</span>
+        </div>
+        <table>
+          <thead><tr><th>状态</th><th>含义</th><th>用户可做</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge">本地草稿</span></td><td>只在本机，尚未进入队列</td><td>继续编辑 / 删除</td></tr>
+            <tr><td><span class="badge warn">待同步</span></td><td>已入队，等待网络</td><td>立即同步</td></tr>
+            <tr><td><span class="badge brand">同步中</span></td><td>请求已发出</td><td>等待</td></tr>
+            <tr><td><span class="badge danger">同步失败</span></td><td>网络或服务端错误</td><td>重试 / 查看详情</td></tr>
+            <tr><td><span class="badge ok">已同步</span></td><td>服务端已确认并返回 ID</td><td>查看服务端单据</td></tr>
+            <tr><td><span class="badge danger">版本冲突</span></td><td>服务端版本已变</td><td>重新加载 / 另存为新草稿</td></tr>
+          </tbody>
+        </table>
+        <div class="footnote">版本冲突时<b>绝不静默覆盖</b>：客户端必须让用户二选一，并把选择写进审计。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 05 移动入库 ============ -->
+<section class="section" id="s-m-in"
+  data-title="05 · 入库单填写（Android 卡片式）" data-sub="按「进项公司分组 → 产品明细行」两级组织。一张单可继续添加其他进项公司；明细可增删，序号自动连续，金额与合计实时联动。">
+  <div class="note">移动端把宽表拆成卡片：每个进项公司一张卡，卡内每行明细是一个小块，避免横向滚动。金额公式固定为 <b>单价 × 数量</b>，含税 / 不含税只做记录与展示。</div>
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>已连接</span></div>
+        <div class="appbar"><span class="back" data-go="s-m-home">‹</span><h4>入库单</h4><span class="badge">草稿</span></div>
+        <div class="scroll">
+          <div class="mcard">
+            <h5>单据信息</h5>
+            <div class="mgrid">
+              <label>业务员</label><input type="text" value="王业务" readonly>
+              <label>日期</label><input type="text" value="2026-09-22">
+              <label>单号（自动）</label><input type="text" class="num" value="RK20260922-0007" readonly>
+              <label>单据状态</label><input type="text" value="草稿" readonly>
+            </div>
+            <div class="footnote">日期支持输入 <code>2026 9 22</code>，系统规范化为 <code>2026-09-22</code>。</div>
+          </div>
+
+          <div class="mcard">
+            <h5>进项公司 1 <span class="spacer"></span><span class="badge brand">¥96,500.00</span></h5>
+            <div class="mgrid one" style="margin-bottom:9px">
+              <label>进项公司名称</label><input type="text" value="鑫源钢贸有限公司">
+            </div>
+            <div class="mrow">
+              <div class="head"><span class="n">1</span><b>螺纹钢 HRB400 Φ20</b><span class="spacer"></span><span class="badge">含税价</span></div>
+              <div class="mgrid">
+                <label>品名</label><input type="text" value="螺纹钢">
+                <label>规格型号</label><input type="text" value="HRB400 Φ20">
+                <label>单位</label><input type="text" value="吨">
+                <label>数量</label><input type="number" value="40">
+                <label>重量（吨）</label><input type="number" value="40.2">
+                <label>单价</label><input type="number" value="1800">
+              </div>
+              <div class="chips" style="margin:8px 0"><span class="chip active">含税价</span><span class="chip">不含税价</span></div>
+              <div class="mline"><span class="l">金额（单价 × 数量）</span><span class="r"><b>¥72,000.00</b></span></div>
+              <div class="mgrid one" style="margin-top:6px"><label>备注</label><input type="text" value="9 月 20 日到货"></div>
+              <div style="margin-top:7px;display:flex;gap:7px"><button class="btn sm ghost">复制本行</button><button class="btn sm danger">删除</button></div>
+            </div>
+            <div class="mrow">
+              <div class="head"><span class="n">2</span><b>盘螺 HRB400 Φ8</b><span class="spacer"></span><span class="badge">不含税价</span></div>
+              <div class="mgrid">
+                <label>品名</label><input type="text" value="盘螺">
+                <label>规格型号</label><input type="text" value="HRB400 Φ8">
+                <label>单位</label><input type="text" value="吨">
+                <label>数量</label><input type="number" value="14">
+                <label>重量（吨）</label><input type="number" value="14.1">
+                <label>单价</label><input type="number" value="1750">
+              </div>
+              <div class="chips" style="margin:8px 0"><span class="chip">含税价</span><span class="chip active">不含税价</span></div>
+              <div class="mline"><span class="l">金额（单价 × 数量）</span><span class="r"><b>¥24,500.00</b></span></div>
+            </div>
+            <button class="btn ghost" style="width:100%">＋ 添加产品明细</button>
+            <div class="mline" style="margin-top:8px;border-top:1px solid var(--line);padding-top:7px">
+              <span class="l">本公司小计</span><span class="r"><b>¥96,500.00</b></span>
+            </div>
+          </div>
+
+          <div class="mcard">
+            <h5>进项公司 2 <span class="spacer"></span><span class="badge brand">¥50,592.00</span></h5>
+            <div class="mgrid one" style="margin-bottom:9px">
+              <label>进项公司名称</label><input type="text" value="昌盛金属材料有限公司">
+            </div>
+            <div class="mrow" style="margin-bottom:0">
+              <div class="head"><span class="n">1</span><b>热轧卷板 Q235B 3.0×1500</b><span class="spacer"></span><span class="badge">含税价</span></div>
+              <div class="mgrid">
+                <label>品名</label><input type="text" value="热轧卷板">
+                <label>规格型号</label><input type="text" value="Q235B 3.0×1500">
+                <label>单位</label><input type="text" value="吨">
+                <label>数量</label><input type="number" value="17">
+                <label>重量（吨）</label><input type="number" value="17.05">
+                <label>单价</label><input type="number" value="2976">
+              </div>
+              <div class="chips" style="margin:8px 0"><span class="chip active">含税价</span><span class="chip">不含税价</span></div>
+              <div class="mline"><span class="l">金额</span><span class="r"><b>¥50,592.00</b></span></div>
+            </div>
+            <button class="btn ghost" style="width:100%">＋ 添加产品明细</button>
+          </div>
+
+          <button class="btn ghost" style="width:100%">＋ 添加其他进项公司</button>
+
+          <div class="mcard" style="border-color:var(--brand)">
+            <h5>合计</h5>
+            <div class="mline"><span class="l">总金额</span><span class="r" style="font-size:16px"><b>¥147,092.00</b></span></div>
+            <div class="mline"><span class="l">大写</span><span class="r">RMB壹拾肆万柒仟零玖拾贰元整</span></div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <button class="btn" style="flex:1">保存草稿</button>
+            <button class="btn primary" style="flex:1">提交到后台</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="flex:1;min-width:340px">
+      <header><h3>移动端适配要点</h3></header>
+      <div class="body">
+        <table>
+          <thead><tr><th>桌面宽表</th><th>Android 卡片式</th></tr></thead>
+          <tbody>
+            <tr><td>一行一个明细，横向多列</td><td>一节一个明细，字段纵向排列</td></tr>
+            <tr><td>公司分组横向合并单元格</td><td>公司是外层卡片，明细是卡内小块</td></tr>
+            <tr><td>默认 5 行空行</td><td>不预置空行，用「＋ 添加」按需生成</td></tr>
+            <tr><td>底部固定总计条</td><td>合计卡片跟随内容，提交前二次确认</td></tr>
+            <tr><td>Tab 键切换焦点</td><td>数字键盘 + 聚焦滚动，不遮挡当前行</td></tr>
+          </tbody>
+        </table>
+        <div class="note plain" style="margin-top:12px">辅助填写三模式对同一字段生效：<b>纯净</b>（不联想，保存后询问是否入库）、<b>联想</b>（输入即时匹配）、<b>辅助</b>（只能从候选中选，禁止自由输入）。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 06 移动出库 ============ -->
+<section class="section" id="s-m-out"
+  data-title="06 · 出库单填写（Android 卡片式）" data-sub="与入库结构对称：客户分组承载多条产品明细。差异在于必须选择销售金额类型（Y-1 / y-N / N），以及记录客户收款方式。">
+  <div class="note">销售金额类型在界面显示为中文，数据库保留稳定代码：<code>Y-1</code> 增值税专用发票销售金额、<code>y-N</code> 增值税普通发票销售金额、<code>N</code> 不开票销售金额。</div>
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>已连接</span></div>
+        <div class="appbar"><span class="back" data-go="s-m-home">‹</span><h4>出库单</h4><span class="badge">草稿</span></div>
+        <div class="scroll">
+          <div class="mcard">
+            <h5>单据信息</h5>
+            <div class="mgrid">
+              <label>业务员</label><input type="text" value="王业务" readonly>
+              <label>交易日期</label><input type="text" value="2026-09-22">
+              <label>单号（自动）</label><input type="text" class="num" value="CK20260922-0011" readonly>
+              <label>出货单位</label><input type="text" value="钢铁贸易一组 · 一号库">
+            </div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-2)">销售金额类型 <b class="req">*</b></div>
+            <div class="chips" style="margin-top:5px">
+              <span class="chip active">增值税专用发票（Y-1）</span>
+              <span class="chip">增值税普通发票（y-N）</span>
+              <span class="chip">不开票（N）</span>
+            </div>
+          </div>
+
+          <div class="mcard">
+            <h5>客户 1 <span class="spacer"></span><span class="badge brand">¥113,200.00</span></h5>
+            <div class="mgrid one" style="margin-bottom:9px">
+              <label>客户名称</label><input type="text" value="宏达建筑工程有限公司">
+              <label>联系电话</label><input type="text" class="num" value="138****6621">
+            </div>
+            <div class="mrow">
+              <div class="head"><span class="n">1</span><b>螺纹钢 HRB400 Φ20</b><span class="spacer"></span><span class="badge">含税价</span></div>
+              <div class="mgrid">
+                <label>品名</label><input type="text" value="螺纹钢">
+                <label>规格型号</label><input type="text" value="HRB400 Φ20">
+                <label>单位</label><input type="text" value="吨">
+                <label>数量</label><input type="number" value="38">
+                <label>重量（吨）</label><input type="number" value="38.4">
+                <label>单价</label><input type="number" value="2380">
+              </div>
+              <div class="chips" style="margin:8px 0"><span class="chip active">含税价</span><span class="chip">不含税价</span></div>
+              <div class="mline"><span class="l">金额</span><span class="r"><b>¥90,440.00</b></span></div>
+            </div>
+            <div class="mrow">
+              <div class="head"><span class="n">2</span><b>盘螺 HRB400 Φ8</b><span class="spacer"></span><span class="badge">含税价</span></div>
+              <div class="mgrid">
+                <label>品名</label><input type="text" value="盘螺">
+                <label>规格型号</label><input type="text" value="HRB400 Φ8">
+                <label>单位</label><input type="text" value="吨">
+                <label>数量</label><input type="number" value="10">
+                <label>重量（吨）</label><input type="number" value="10.05">
+                <label>单价</label><input type="number" value="2276">
+              </div>
+              <div class="mline"><span class="l">金额</span><span class="r"><b>¥22,760.00</b></span></div>
+            </div>
+            <button class="btn ghost" style="width:100%">＋ 添加产品明细</button>
+            <div class="mline" style="margin-top:8px;border-top:1px solid var(--line);padding-top:7px">
+              <span class="l">本客户小计</span><span class="r"><b>¥113,200.00</b></span>
+            </div>
+          </div>
+
+          <div class="mcard">
+            <h5>收款记录</h5>
+            <div class="mrow" style="margin-bottom:8px">
+              <div class="head"><b>收款 1</b><span class="spacer"></span><span class="badge ok">已收款</span></div>
+              <div class="mgrid">
+                <label>收款方式</label><input type="text" value="对公账户">
+                <label>收款金额</label><input type="number" value="80000">
+                <label>收款日期</label><input type="text" value="2026-09-22">
+                <label>经办人</label><input type="text" value="财务李">
+              </div>
+            </div>
+            <div class="chips" style="margin-bottom:8px">
+              <span class="chip">转账（可备注微信 / 支付宝）</span>
+              <span class="chip active">对公账户</span>
+              <span class="chip">对私卡（记录卡尾号）</span>
+            </div>
+            <button class="btn ghost" style="width:100%">＋ 添加收款记录</button>
+            <div class="mline" style="margin-top:8px"><span class="l">已收款 / 未收款</span><span class="r">¥80,000.00 / <b class="num">¥33,200.00</b></span></div>
+          </div>
+
+          <button class="btn ghost" style="width:100%">＋ 添加其他客户</button>
+
+          <div class="mcard" style="border-color:var(--brand)">
+            <h5>合计</h5>
+            <div class="mline"><span class="l">总金额</span><span class="r" style="font-size:16px"><b>¥173,520.00</b></span></div>
+            <div class="mline"><span class="l">大写</span><span class="r">RMB壹拾柒万叁仟伍佰贰拾元整</span></div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <button class="btn" style="flex:1">保存草稿</button>
+            <button class="btn primary" style="flex:1">提交到后台</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:340px">
+      <header><h3>收款方式与销售类型</h3></header>
+      <div class="body">
+        <table>
+          <thead><tr><th>收款方式</th><th>代码</th><th>附加字段</th></tr></thead>
+          <tbody>
+            <tr><td>转账</td><td><code>transfer</code></td><td>可备注微信 / 支付宝</td></tr>
+            <tr><td>对私卡</td><td><code>private_card</code></td><td>卡尾号 4 位（日志脱敏）</td></tr>
+            <tr><td>对公账户</td><td><code>public_account</code></td><td>—</td></tr>
+          </tbody>
+        </table>
+        <div class="note plain" style="margin-top:12px">收款按明细建模，支持一张出库单分多次收款；未收款金额 = 出库单总金额 − 该单全部收款记录之和，由服务端计算，客户端不本地累计。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 07 历史 ============ -->
+<section class="section" id="s-m-history"
+  data-title="07 · 单据历史与同步状态" data-sub="业务员按月份回顾本人（或有权限查看的）入库单、出库单、结算单；每张单据都显示服务端业务状态与本地同步状态。">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>已连接</span></div>
+        <div class="appbar"><span class="back" data-go="s-m-home">‹</span><h4>单据历史</h4></div>
+        <div class="scroll">
+          <div class="chips" style="margin-bottom:10px">
+            <span class="chip active">全部</span><span class="chip">入库</span><span class="chip">出库</span><span class="chip">结算</span>
+          </div>
+          <div class="chips" style="margin-bottom:11px">
+            <span class="chip">2026-07</span><span class="chip">2026-08</span><span class="chip active">2026-09</span>
+          </div>
+          <div class="mcard">
+            <h5>2026-09 月度汇总</h5>
+            <div class="mline"><span class="l">入库金额合计</span><span class="r">¥147,092.00</span></div>
+            <div class="mline"><span class="l">出库金额合计</span><span class="r">¥173,520.00</span></div>
+            <div class="mline"><span class="l">毛利润</span><span class="r"><b>¥26,428.00</b></span></div>
+          </div>
+          <div class="mcard">
+            <div class="mrow">
+              <div class="head"><span class="badge brand">入库</span><b class="num">RK20260922-0007</b><span class="spacer"></span><span class="badge warn">草稿</span></div>
+              <div class="mline"><span class="l">鑫源钢贸 / 昌盛金属</span><span class="r">¥147,092.00</span></div>
+              <div class="mline"><span class="l">本地状态</span><span class="r"><span class="badge danger">同步失败</span></span></div>
+            </div>
+            <div class="mrow">
+              <div class="head"><span class="badge info">出库</span><b class="num">CK20260922-0011</b><span class="spacer"></span><span class="badge ok">已提交</span></div>
+              <div class="mline"><span class="l">宏达建筑 / 恒信机电</span><span class="r">¥173,520.00</span></div>
+              <div class="mline"><span class="l">本地状态</span><span class="r"><span class="badge ok">已同步</span></span></div>
+              <div class="mline"><span class="l">收款情况</span><span class="r">已收 ¥80,000 · 未收 ¥33,200</span></div>
+            </div>
+            <div class="mrow" style="margin-bottom:0">
+              <div class="head"><span class="badge">结算</span><b class="num">JS202609-0002</b><span class="spacer"></span><span class="badge danger">审批驳回</span></div>
+              <div class="mline"><span class="l">关联源单据</span><span class="r">3 张</span></div>
+              <div class="mline"><span class="l">驳回原因</span><span class="r">来源单据 CK20260901-0003 金额有误，请核对后重提</span></div>
+              <div style="margin-top:8px;display:flex;gap:7px"><button class="btn sm">查看详情</button><button class="btn sm primary">修改后重新提交</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-nav"><div>首页</div><div>填写</div><div class="active">历史</div><div>我的</div></div>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <header><h3>业务状态 vs 同步状态</h3></header>
+      <div class="body">
+        <div class="note plain">两个维度互不替代：<b>业务状态</b>由服务端业务流转决定；<b>同步状态</b>只描述本机草稿是否已成功上送。</div>
+        <table>
+          <thead><tr><th>维度</th><th>取值</th><th>归属</th></tr></thead>
+          <tbody>
+            <tr><td>业务状态（单据）</td><td>草稿 / 已提交</td><td>入库、出库单</td></tr>
+            <tr><td>业务状态（结算）</td><td>待审批 / 审批通过 / 审批驳回</td><td>结算单</td></tr>
+            <tr><td>同步状态</td><td>本地草稿 / 待同步 / 同步中 / 同步失败 / 已同步 / 版本冲突</td><td>本机队列</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 08 结算申请 ============ -->
+<section class="section" id="s-m-settle"
+  data-title="08 · 结算申请" data-sub="业务员勾选一张或多张已提交的入库单、出库单，提交生成销售结算单申请；后台据此汇总进项合计、销售合计与毛利润。">
+  <div class="note">选择实时联动：右侧合计随勾选变化，让业务员在提交前就能看到进项、销售与毛利润三个数。提交后必须保留结算单与源单据的关联关系。</div>
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>已连接</span></div>
+        <div class="appbar"><span class="back" data-go="s-m-home">‹</span><h4>申请结算</h4></div>
+        <div class="scroll">
+          <div class="mcard">
+            <h5>选择源单据</h5>
+            <div class="mrow">
+              <div class="head"><input type="checkbox" checked data-kind="inbound" data-amount="96500"><span class="badge brand">入库</span><b class="num">RK20260915-0004</b></div>
+              <div class="mline"><span class="l">鑫源钢贸</span><span class="r">¥96,500.00</span></div>
+            </div>
+            <div class="mrow">
+              <div class="head"><input type="checkbox" checked data-kind="inbound" data-amount="50592"><span class="badge brand">入库</span><b class="num">RK20260916-0005</b></div>
+              <div class="mline"><span class="l">昌盛金属</span><span class="r">¥50,592.00</span></div>
+            </div>
+            <div class="mrow">
+              <div class="head"><input type="checkbox" checked data-kind="outbound" data-amount="113200"><span class="badge info">出库</span><b class="num">CK20260918-0009</b></div>
+              <div class="mline"><span class="l">宏达建筑</span><span class="r">¥113,200.00</span></div>
+            </div>
+            <div class="mrow" style="margin-bottom:0">
+              <div class="head"><input type="checkbox" data-kind="outbound" data-amount="60320"><span class="badge info">出库</span><b class="num">CK20260919-0010</b></div>
+              <div class="mline"><span class="l">恒信机电</span><span class="r">¥60,320.00</span></div>
+            </div>
+          </div>
+          <div class="mcard" style="border-color:var(--brand)" id="settlePreview">
+            <h5>本次结算预览</h5>
+            <div class="mline"><span class="l">进项合计</span><span class="r" id="previewInbound">¥147,092.00</span></div>
+            <div class="mline"><span class="l">销售合计</span><span class="r" id="previewOutbound">¥113,200.00</span></div>
+            <div class="mline"><span class="l">毛利润</span><span class="r"><b class="num" id="previewProfit">−¥33,892.00</b></span></div>
+            <div class="note warn" id="previewWarn" style="margin:9px 0 0">毛利润为负，请确认是否漏选出库单。</div>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:12px">
+            <button class="btn" style="flex:1">存为草稿</button>
+            <button class="btn primary" style="flex:1">提交结算申请</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="flex:1;min-width:320px">
+      <header><h3>结算单与源单据的关系</h3></header>
+      <div class="body">
+        <div class="flow" style="margin-bottom:12px">
+          <span class="step">勾选源单据</span><span class="arrow">→</span>
+          <span class="step">生成结算单（待审批）</span><span class="arrow">→</span>
+          <span class="step">写入 settlement_sources</span><span class="arrow">→</span>
+          <span class="step">保存生成时快照</span>
+        </div>
+        <table>
+          <thead><tr><th>要点</th><th>做法</th></tr></thead>
+          <tbody>
+            <tr><td>关联关系</td><td>每张源单据在 <code>settlement_sources</code> 存一行，记录类型与 ID</td></tr>
+            <tr><td>金额快照</td><td>生成时把进项 / 销售 / 毛利写入结算单本体，源单据后续被改不影响已生成结算单</td></tr>
+            <tr><td>重复结算</td><td>同一源单据不允许被两张有效结算单同时引用（服务端校验）</td></tr>
+            <tr><td>状态机</td><td>待审批 → 审批通过 / 审批驳回（驳回必填原因）</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 09 入库宽表 ============ -->
+<section class="section" id="s-w-in"
+  data-title="09 · 入库单宽表（Windows / Web / 后台 PC）" data-sub="桌面端按甲方 Excel 习惯做宽表：同一进项公司多条明细、默认 5 行、Tab 键切换焦点、底部固定总计条并自动生成人民币大写。">
+  <div class="note">宽表与移动端共用同一套数据模型与校验规则：字段、税价类型、金额公式、合计口径必须完全一致，只差布局。</div>
+  <div class="card">
+    <header><h3>入库单 · 录入</h3><div class="spacer"></div>
+      <span class="badge">草稿</span><span class="badge">RK20260922-0007</span>
+      <button class="btn sm">保存草稿</button><button class="btn sm primary">提交到后台</button>
+    </header>
+    <div class="body">
+      <div class="row c4" style="margin-bottom:14px">
+        <label class="field"><span>业务员</span><input type="text" value="王业务" readonly></label>
+        <label class="field"><span>日期</span><input type="text" value="2026-09-22"></label>
+        <label class="field"><span>单号（自动生成）</span><input type="text" class="num" value="RK20260922-0007" readonly></label>
+        <label class="field"><span>状态</span><input type="text" value="草稿" readonly></label>
+      </div>
+      <div class="table-wrap">
+        <table id="inboundWide" data-calc>
+          <thead>
+            <tr>
+              <th style="min-width:150px">进项公司</th><th class="num" style="width:52px">序号</th>
+              <th style="min-width:100px">品名</th><th style="min-width:130px">规格型号</th>
+              <th style="width:70px">单位</th><th class="num" style="width:80px">数量</th>
+              <th class="num" style="width:88px">重量(吨)</th><th class="num" style="width:92px">单价</th>
+              <th style="width:104px">单价类型</th><th class="num" style="width:110px">金额</th>
+              <th style="min-width:120px">备注</th><th style="width:52px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td rowspan="3"><b>鑫源钢贸有限公司</b><div class="badge brand" style="margin-top:5px">小计 ¥96,500.00</div></td>
+              <td class="num">1</td><td>螺纹钢</td><td>HRB400 Φ20</td><td>吨</td>
+              <td class="num">40</td><td class="num">40.20</td><td class="num">1800.00</td>
+              <td>含税价</td><td class="num"><b>72,000.00</b></td><td>9/20 到货</td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">2</td><td>盘螺</td><td>HRB400 Φ8</td><td>吨</td>
+              <td class="num">14</td><td class="num">14.10</td><td class="num">1750.00</td>
+              <td>不含税价</td><td class="num"><b>24,500.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">3</td><td>圆钢</td><td>Q235B Φ16</td><td>吨</td>
+              <td class="num">3</td><td class="num">3.00</td><td class="num">0.00</td>
+              <td>含税价</td><td class="num"><b>0.00</b></td><td>待补单价</td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td rowspan="2"><b>昌盛金属材料有限公司</b><div class="badge brand" style="margin-top:5px">小计 ¥50,592.00</div></td>
+              <td class="num">1</td><td>热轧卷板</td><td>Q235B 3.0×1500</td><td>吨</td>
+              <td class="num">17</td><td class="num">17.05</td><td class="num">2976.00</td>
+              <td>含税价</td><td class="num"><b>50,592.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">2</td><td></td><td></td><td></td><td class="num"></td><td class="num"></td><td class="num"></td>
+              <td></td><td class="num"></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="9">入库单总金额</td><td class="num">147,092.00</td><td colspan="2"></td></tr>
+            <tr><td colspan="9">大写</td><td colspan="3">RMB壹拾肆万柒仟零玖拾贰元整</td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn ghost">＋ 添加明细行</button>
+        <button class="btn ghost">＋ 添加进项公司</button>
+      </div>
+      <div class="legend">
+        <span>数量与单价单元格可直接编辑，金额会实时重算</span><span>默认展示 5 行，可继续添加</span><span>Tab 顺序：品名 → 型号 → 单位 → 数量 → 重量 → 单价 → 类型 → 备注</span>
+      </div>
+    </div>
+  </div>
+  <div class="grid two">
+    <div class="card">
+      <header><h3>辅助填写三模式（桌面）</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>模式</th><th>输入行为</th><th>确认方式</th></tr></thead>
+          <tbody>
+            <tr><td><b>纯净</b></td><td>不联想、不推荐，允许任意输入</td><td>全部填写完成后询问是否入库</td></tr>
+            <tr><td><b>联想</b></td><td>允许输入，按前缀实时匹配候选</td><td>点击候选项确认</td></tr>
+            <tr><td><b>辅助</b></td><td>禁止自由输入</td><td>只能滑动 / 点选候选项后确认</td></tr>
+          </tbody>
+        </table>
+        <div style="padding:12px 16px"><div class="note plain" style="margin:0">型号必须挂在品名下：选了品名「盘螺」之后，型号只列出盘螺的规格，不展示全部型号。</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>日期规范化</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>用户输入</th><th>保存值</th><th>界面展示</th></tr></thead>
+          <tbody>
+            <tr><td><code class="num">2026 3 14</code></td><td>2026-03-14</td><td>2026-03-14</td></tr>
+            <tr><td><code class="num">2026-3-14</code></td><td>2026-03-14</td><td>2026-03-14</td></tr>
+            <tr><td><code class="num">20260314</code></td><td>2026-03-14</td><td>2026-03-14</td></tr>
+            <tr><td><code>2026/13/40</code></td><td colspan="2"><span class="badge danger">校验失败</span> 提示日期不合法，不静默纠正</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10 出库宽表 ============ -->
+<section class="section" id="s-w-out"
+  data-title="10 · 出库单宽表" data-sub="结构对称于入库宽表：客户分组承载明细，顶部选择销售金额类型，底部记录收款。">
+  <div class="card">
+    <header><h3>出库单 · 录入</h3><div class="spacer"></div>
+      <span class="badge">草稿</span><span class="badge">CK20260922-0011</span>
+      <button class="btn sm">保存草稿</button><button class="btn sm primary">提交到后台</button>
+    </header>
+    <div class="body">
+      <div class="row c4" style="margin-bottom:10px">
+        <label class="field"><span>业务员</span><input type="text" value="王业务" readonly></label>
+        <label class="field"><span>交易日期</span><input type="text" value="2026-09-22"></label>
+        <label class="field"><span>出货单位</span><input type="text" value="钢铁贸易一组 · 一号库"></label>
+        <label class="field"><span>销售金额类型 <b class="req">*</b></span>
+          <select><option>增值税专用发票销售金额（Y-1）</option><option>增值税普通发票销售金额（y-N）</option><option>不开票销售金额（N）</option></select></label>
+      </div>
+      <div class="table-wrap">
+        <table id="outboundWide" data-calc>
+          <thead>
+            <tr>
+              <th style="min-width:160px">客户 / 联系电话</th><th class="num" style="width:52px">序号</th>
+              <th style="min-width:100px">品名</th><th style="min-width:130px">规格型号</th>
+              <th style="width:70px">单位</th><th class="num" style="width:80px">数量</th>
+              <th class="num" style="width:88px">重量(吨)</th><th class="num" style="width:92px">单价</th>
+              <th style="width:104px">单价类型</th><th class="num" style="width:110px">金额</th>
+              <th style="min-width:110px">备注</th><th style="width:52px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td rowspan="2"><b>宏达建筑工程有限公司</b><div class="num" style="color:var(--text-3);font-size:11.5px">138****6621</div><div class="badge brand" style="margin-top:5px">小计 ¥113,200.00</div></td>
+              <td class="num">1</td><td>螺纹钢</td><td>HRB400 Φ20</td><td>吨</td>
+              <td class="num">38</td><td class="num">38.40</td><td class="num">2380.00</td>
+              <td>含税价</td><td class="num"><b>90,440.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">2</td><td>盘螺</td><td>HRB400 Φ8</td><td>吨</td>
+              <td class="num">10</td><td class="num">10.05</td><td class="num">2276.00</td>
+              <td>含税价</td><td class="num"><b>22,760.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td rowspan="3"><b>恒信机电设备有限公司</b><div class="num" style="color:var(--text-3);font-size:11.5px">139****3388</div><div class="badge brand" style="margin-top:5px">小计 ¥60,320.00</div></td>
+              <td class="num">1</td><td>热轧卷板</td><td>Q235B 3.0×1500</td><td>吨</td>
+              <td class="num">12</td><td class="num">12.02</td><td class="num">3120.00</td>
+              <td>含税价</td><td class="num"><b>37,440.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">2</td><td>圆钢</td><td>Q235B Φ16</td><td>吨</td>
+              <td class="num">11</td><td class="num">11.00</td><td class="num">2080.00</td>
+              <td>不含税价</td><td class="num"><b>22,880.00</b></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+            <tr><td class="num">3</td><td></td><td></td><td></td><td class="num"></td><td class="num"></td><td class="num"></td>
+              <td></td><td class="num"></td><td></td><td><button class="btn sm danger">删</button></td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="9">出库单总金额</td><td class="num">173,520.00</td><td colspan="2"></td></tr>
+            <tr><td colspan="9">大写</td><td colspan="3">RMB壹拾柒万叁仟伍佰贰拾元整</td></tr>
+            <tr><td colspan="9">已收款 / 未收款</td><td class="num">80,000.00 / 33,200.00</td><td colspan="2"></td></tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn ghost">＋ 添加明细行</button>
+        <button class="btn ghost">＋ 添加客户</button>
+        <button class="btn ghost">＋ 添加收款记录</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 汇总 ============ -->
+<section class="section" id="s-w-reports"
+  data-title="11 · 数据汇总（后台 PC）" data-sub="汇总全部业务员上传的入库、出库数据；支持按年份、月份、业务员筛选，支持「全部数据」与「按业务员」两种视图，并可选择是否显示日期与业务员列。">
+  <div class="stats">
+    <div class="stat"><div class="k">入库金额总计</div><div class="v">¥1,246,982.33</div><div class="d">本月 6 张入库单</div></div>
+    <div class="stat"><div class="k">未付款总计</div><div class="v red">¥231,632.00</div><div class="d">涉及 3 家进项公司</div></div>
+    <div class="stat"><div class="k">出库金额总计</div><div class="v">¥1,573,540.00</div><div class="d">本月 8 张出库单</div></div>
+    <div class="stat"><div class="k">未收款总计</div><div class="v red">¥186,340.00</div><div class="d">涉及 4 家客户</div></div>
+    <div class="stat"><div class="k">毛利润</div><div class="v green">¥326,557.67</div><div class="d">出库 − 入库</div></div>
+  </div>
+
+  <div class="card">
+    <header><h3>筛选条件</h3></header>
+    <div class="body">
+      <div class="row c4" style="margin-bottom:0">
+        <label class="field"><span>年份</span><select><option>2026</option><option>2025</option></select></label>
+        <label class="field"><span>月份</span><select><option>全部</option><option>09</option><option>08</option><option>07</option></select></label>
+        <label class="field"><span>业务员</span><select><option>全部业务员</option><option>王业务</option><option>赵业务</option><option>孙业务</option></select></label>
+        <label class="field"><span>模块</span><select><option>入库</option><option>出库</option><option>结算</option></select></label>
+      </div>
+      <div class="chips" style="margin-top:4px">
+        <span class="chip active">全部数据视图</span><span class="chip">按业务员视图</span>
+        <span class="chip active">显示日期列</span><span class="chip active">显示业务员列</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <header><h3>入库统计</h3><div class="spacer"></div><span class="hint">金额总计 / 未付款 / 开票状态</span></header>
+      <div class="body tight">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>进项公司</th><th>品名</th><th>型号</th><th class="num">金额</th><th class="num">已付</th><th class="num">未付</th><th>开票</th></tr></thead>
+            <tbody>
+              <tr><td>鑫源钢贸</td><td>螺纹钢</td><td>HRB400 Φ20</td><td class="num">72,000.00</td><td class="num">72,000.00</td><td class="num">0.00</td><td><span class="badge ok">已开票</span></td></tr>
+              <tr><td>鑫源钢贸</td><td>盘螺</td><td>HRB400 Φ8</td><td class="num">24,500.00</td><td class="num">0.00</td><td class="num">24,500.00</td><td><span class="badge warn">未开票</span></td></tr>
+              <tr><td>昌盛金属</td><td>热轧卷板</td><td>Q235B 3.0×1500</td><td class="num">50,592.00</td><td class="num">30,000.00</td><td class="num">20,592.00</td><td><span class="badge info">部分开票</span></td></tr>
+              <tr><td>永利钢铁</td><td>圆钢</td><td>Q235B Φ16</td><td class="num">186,540.00</td><td class="num">0.00</td><td class="num">186,540.00</td><td><span class="badge warn">未开票</span></td></tr>
+            </tbody>
+            <tfoot><tr><td colspan="3">合计</td><td class="num">333,632.00</td><td class="num">102,000.00</td><td class="num">231,632.00</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>出库统计</h3><div class="spacer"></div><span class="hint">三类销售金额分别统计</span></header>
+      <div class="body tight">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>客户</th><th>品名</th><th>型号</th><th class="num">金额</th><th class="num">未收</th><th>销售类型</th></tr></thead>
+            <tbody>
+              <tr><td>宏达建筑</td><td>螺纹钢</td><td>HRB400 Φ20</td><td class="num">90,440.00</td><td class="num">33,200.00</td><td><span class="badge info">Y-1</span></td></tr>
+              <tr><td>宏达建筑</td><td>盘螺</td><td>HRB400 Φ8</td><td class="num">22,760.00</td><td class="num">0.00</td><td><span class="badge info">Y-1</span></td></tr>
+              <tr><td>恒信机电</td><td>热轧卷板</td><td>Q235B 3.0×1500</td><td class="num">37,440.00</td><td class="num">37,440.00</td><td><span class="badge warn">y-N</span></td></tr>
+              <tr><td>恒信机电</td><td>圆钢</td><td>Q235B Φ16</td><td class="num">22,880.00</td><td class="num">22,880.00</td><td><span class="badge danger">N</span></td></tr>
+            </tbody>
+            <tfoot><tr><td colspan="3">合计</td><td class="num">173,520.00</td><td class="num">93,520.00</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>三类销售金额分项统计</h3></header>
+    <div class="body">
+      <div class="stats" style="margin-bottom:0">
+        <div class="stat"><div class="k"><span class="badge info">Y-1</span> 增值税专用发票销售金额</div><div class="v">¥113,200.00</div><div class="d">占比 65.2%</div></div>
+        <div class="stat"><div class="k"><span class="badge warn">y-N</span> 增值税普通发票销售金额</div><div class="v">¥37,440.00</div><div class="d">占比 21.6%</div></div>
+        <div class="stat"><div class="k"><span class="badge danger">N</span> 不开票销售金额</div><div class="v">¥22,880.00</div><div class="d">占比 13.2%</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 12 审批 ============ -->
+<section class="section" id="s-w-approve"
+  data-title="12 · 结算单生成与审批" data-sub="后台按被勾选的源单据自动汇总生成结算单，展示进项合计、销售合计、毛利润；有审批权限的人员可以审批通过或驳回，并记录操作人、时间、结果与备注。">
+  <div class="grid side">
+    <div class="card">
+      <header><h3>结算单 JS202609-0003</h3><div class="spacer"></div><span class="badge warn">待审批</span></header>
+      <div class="body">
+        <div class="row c4" style="margin-bottom:12px">
+          <label class="field"><span>结算单号</span><input type="text" class="num" value="JS202609-0003" readonly></label>
+          <label class="field"><span>申请人</span><input type="text" value="王业务" readonly></label>
+          <label class="field"><span>提交时间</span><input type="text" value="2026-09-22 10:12" readonly></label>
+          <label class="field"><span>源单据数</span><input type="text" value="3 张" readonly></label>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><div class="k">进项合计</div><div class="v">¥147,092.00</div></div>
+          <div class="stat"><div class="k">销售合计</div><div class="v">¥113,200.00</div></div>
+          <div class="stat"><div class="k">毛利润</div><div class="v red">−¥33,892.00</div><div class="d">销售 − 进项</div></div>
+        </div>
+
+        <h4 style="font-size:12.5px;margin:16px 0 6px">关联源单据</h4>
+        <table>
+          <thead><tr><th>类型</th><th>单号</th><th>对方单位</th><th class="num">金额</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge brand">入库</span></td><td class="num">RK20260915-0004</td><td>鑫源钢贸</td><td class="num">96,500.00</td></tr>
+            <tr><td><span class="badge brand">入库</span></td><td class="num">RK20260916-0005</td><td>昌盛金属</td><td class="num">50,592.00</td></tr>
+            <tr><td><span class="badge info">出库</span></td><td class="num">CK20260918-0009</td><td>宏达建筑</td><td class="num">113,200.00</td></tr>
+          </tbody>
+        </table>
+
+        <h4 style="font-size:12.5px;margin:16px 0 6px">审批</h4>
+        <label class="field"><span>审批备注（驳回时必填）</span><textarea rows="3">来源单据 CK20260918-0009 金额有误，请核对后重新提交</textarea></label>
+        <div style="display:flex;gap:8px">
+          <button class="btn primary">审批通过</button>
+          <button class="btn danger">驳回</button>
+        </div>
+        <div class="footnote">审批是单级流程；同一结算单只能被审批一次，重复审批返回 <code>RESOURCE_VERSION_CONFLICT</code>。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>审批轨迹（只追加）</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>时间</th><th>操作人</th><th>结果</th><th>备注</th></tr></thead>
+          <tbody>
+            <tr><td class="num">09-22 10:12</td><td>王业务</td><td><span class="badge">提交申请</span></td><td>—</td></tr>
+            <tr><td class="num">09-22 14:30</td><td>财务李</td><td><span class="badge ok">审批通过</span></td><td>金额核对无误</td></tr>
+            <tr><td class="num">09-23 09:05</td><td>财务李</td><td><span class="badge danger">审批驳回</span></td><td>来源单据金额有误</td></tr>
+          </tbody>
+        </table>
+        <div style="padding:12px 16px"><div class="note plain" style="margin:0">驳回后业务员可在历史页看到原因，修改源单据后重新提交；每次提交都生成新的审批记录，旧记录不删除。</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13 财务 ============ -->
+<section class="section" id="s-w-finance"
+  data-title="13 · 付款 / 收款 / 开票跟踪" data-sub="按明细建模，支持一张单据分多次付款或收款；后台可统计未付款总额与未开票记录，并按进项公司、客户、品名、型号查询。">
+  <div class="stats">
+    <div class="stat"><div class="k">采购应付未付</div><div class="v red">¥231,540.00</div><div class="d">4 笔待付</div></div>
+    <div class="stat"><div class="k">销售应收未收</div><div class="v red">¥186,340.00</div><div class="d">5 笔待收</div></div>
+    <div class="stat"><div class="k">已开票金额</div><div class="v">¥886,420.00</div><div class="d">覆盖率 71.1%</div></div>
+    <div class="stat"><div class="k">未开票记录</div><div class="v">3 笔</div><div class="d">¥359,120.00</div></div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <header><h3>付款记录（进项）</h3><div class="spacer"></div><button class="btn sm">＋ 登记付款</button></header>
+      <div class="body tight">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>入库单</th><th>进项公司</th><th class="num">应付</th><th class="num">已付</th><th class="num">未付</th><th>开票状态</th></tr></thead>
+            <tbody>
+              <tr><td class="num">RK20260915-0004</td><td>鑫源钢贸</td><td class="num">96,500.00</td><td class="num">96,500.00</td><td class="num">0.00</td><td><span class="badge ok">已开票</span></td></tr>
+              <tr><td class="num">RK20260916-0005</td><td>昌盛金属</td><td class="num">50,592.00</td><td class="num">30,000.00</td><td class="num">20,592.00</td><td><span class="badge info">部分开票</span></td></tr>
+              <tr><td class="num">RK20260920-0006</td><td>永利钢铁</td><td class="num">186,540.00</td><td class="num">0.00</td><td class="num">186,540.00</td><td><span class="badge warn">未开票</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>收款记录（出库）</h3><div class="spacer"></div><button class="btn sm">＋ 登记收款</button></header>
+      <div class="body tight">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>出库单</th><th>客户</th><th class="num">应收</th><th class="num">已收</th><th class="num">未收</th><th>方式</th></tr></thead>
+            <tbody>
+              <tr><td class="num">CK20260918-0009</td><td>宏达建筑</td><td class="num">113,200.00</td><td class="num">80,000.00</td><td class="num">33,200.00</td><td><span class="badge info">对公账户</span></td></tr>
+              <tr><td class="num">CK20260919-0010</td><td>恒信机电</td><td class="num">60,320.00</td><td class="num">0.00</td><td class="num">60,320.00</td><td>—</td></tr>
+              <tr><td class="num">CK20260920-0012</td><td>三联物流</td><td class="num">92,800.00</td><td class="num">92,800.00</td><td class="num">0.00</td><td><span class="badge">转账 · 微信</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>提醒与消息（一期预留模型）</h3></header>
+    <div class="body tight">
+      <table>
+        <thead><tr><th>类型</th><th>触发条件</th><th>接收人</th><th>状态</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge brand">结算审批结果</span></td><td>结算单被通过或驳回</td><td>申请人</td><td><span class="badge ok">已启用</span></td></tr>
+          <tr><td><span class="badge warn">未付款</span></td><td>入库单超过约定天数仍未付清</td><td>主账号 + 财务子账号</td><td><span class="badge">待冻结</span></td></tr>
+          <tr><td><span class="badge warn">未收款</span></td><td>出库单超过约定天数仍未收清</td><td>主账号 + 财务子账号</td><td><span class="badge">待冻结</span></td></tr>
+          <tr><td><span class="badge danger">未开票</span></td><td>已付款但长期未取得发票</td><td>主账号 + 财务子账号</td><td><span class="badge">待冻结</span></td></tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 16px"><div class="note plain" style="margin:0">一期只要求预留消息模型；具体触发时间、接收人与通知渠道在甲方确认后冻结，未确认前不上线自动提醒。</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 14 总结算 ============ -->
+<section class="section" id="s-w-profit"
+  data-title="14 · 公司 / 业务员总结算与利润" data-sub="支持自动生成公司维度与业务员维度总结算单，并查看业务员利润统计。">
+  <div class="grid two">
+    <div class="card">
+      <header><h3>公司维度总结算</h3><div class="spacer"></div>
+        <select style="width:auto"><option>2026 年 09 月</option><option>2026 年 08 月</option></select>
+        <button class="btn sm primary">生成总结算单</button></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>项目</th><th class="num">金额</th></tr></thead>
+          <tbody>
+            <tr><td>入库（进项）合计</td><td class="num">1,246,982.33</td></tr>
+            <tr><td>出库（销售）合计</td><td class="num">1,573,540.00</td></tr>
+            <tr><td>毛利润</td><td class="num"><b>326,557.67</b></td></tr>
+            <tr><td>毛利率</td><td class="num">20.75%</td></tr>
+            <tr><td>其中 Y-1 销售金额</td><td class="num">1,026,600.00</td></tr>
+            <tr><td>其中 y-N 销售金额</td><td class="num">339,120.00</td></tr>
+            <tr><td>其中 N 销售金额</td><td class="num">207,820.00</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>业务员维度总结算</h3><div class="spacer"></div><button class="btn sm">导出</button></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>业务员</th><th class="num">入库</th><th class="num">出库</th><th class="num">毛利润</th><th class="num">单据数</th></tr></thead>
+          <tbody>
+            <tr><td>王业务</td><td class="num">146,982.33</td><td class="num">173,540.00</td><td class="num">26,557.67</td><td class="num">14</td></tr>
+            <tr><td>赵业务</td><td class="num">402,000.00</td><td class="num">512,000.00</td><td class="num">110,000.00</td><td class="num">21</td></tr>
+            <tr><td>孙业务</td><td class="num">698,000.00</td><td class="num">888,000.00</td><td class="num">190,000.00</td><td class="num">33</td></tr>
+          </tbody>
+          <tfoot><tr><td>合计</td><td class="num">1,246,982.33</td><td class="num">1,573,540.00</td><td class="num">326,557.67</td><td class="num">68</td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="note plain">总结算单同样保存生成时快照：生成之后源单据再被修改，也不会改变已生成的总结算数值。</div>
+</section>
+
+<!-- ============ 15 成员管理 ============ -->
+<section class="section" id="s-members"
+  data-title="15 · 成员管理（主账号）" data-sub="主账号可以邀请、查看、停用、移除组员，并配置子账号权限；但不能把其他成员提升为第二个主账号，主账号变更只能由平台运营执行。">
+  <div class="card">
+    <header><h3>组内成员</h3><div class="spacer"></div>
+      <input type="text" placeholder="搜索账号或姓名" style="width:180px">
+      <button class="btn sm primary" data-go="s-invite">签发邀请码</button></header>
+    <div class="body tight">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>姓名</th><th>登录账号</th><th>身份</th><th>状态</th><th>权限数</th><th>加入时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>一组主账号</b></td><td class="num">group-owner-one</td>
+              <td><span class="badge brand">主账号</span></td><td><span class="badge ok">正常</span></td>
+              <td>全部（角色自带）</td><td class="num">2026-07-24</td>
+              <td><span class="badge">不可操作</span></td>
+            </tr>
+            <tr>
+              <td>王业务</td><td class="num">sales-wang</td>
+              <td><span class="badge">子账号</span></td><td><span class="badge ok">正常</span></td>
+              <td>2 项</td><td class="num">2026-08-02</td>
+              <td>
+                <button class="btn sm" data-go="s-perms">配置权限</button>
+                <button class="btn sm danger">停用</button>
+                <button class="btn sm danger">移除</button>
+              </td>
+            </tr>
+            <tr>
+              <td>财务李</td><td class="num">finance-li</td>
+              <td><span class="badge">子账号</span></td><td><span class="badge ok">正常</span></td>
+              <td>5 项</td><td class="num">2026-08-05</td>
+              <td>
+                <button class="btn sm" data-go="s-perms">配置权限</button>
+                <button class="btn sm danger">停用</button>
+                <button class="btn sm danger">移除</button>
+              </td>
+            </tr>
+            <tr>
+              <td>赵业务</td><td class="num">sales-zhao</td>
+              <td><span class="badge">子账号</span></td><td><span class="badge danger">已停用</span></td>
+              <td>2 项</td><td class="num">2026-08-11</td>
+              <td>
+                <button class="btn sm">启用</button>
+                <button class="btn sm danger">移除</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:12px 16px">
+        <div class="note plain" style="margin:0">停用成员会立即撤销其全部刷新会话，后续请求全部被拒；已创建的历史单据仍然保留并归属本人，不会被删除。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 16 权限配置 ============ -->
+<section class="section" id="s-perms"
+  data-title="16 · 子账号权限配置" data-sub="主账号按「数据范围 + 功能能力」给子账号授予权限码。前端只负责隐藏不可用入口，真正的鉴权始终由后端逐请求完成。">
+  <div class="grid side">
+    <div class="card">
+      <header><h3>王业务 · 权限配置</h3><div class="spacer"></div><span class="badge">子账号</span></header>
+      <div class="body">
+        <table class="perm-table">
+          <thead><tr><th>能力</th><th>权限码</th><th style="width:76px">授予</th></tr></thead>
+          <tbody>
+            <tr><td>查看本人单据</td><td><code>document.self.read</code></td><td><input type="checkbox" checked disabled></td></tr>
+            <tr><td>编辑本人单据</td><td><code>document.self.write</code></td><td><input type="checkbox" checked disabled></td></tr>
+            <tr><td>查看组内他人单据</td><td><code>document.group.read</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>编辑组内他人单据</td><td><code>document.group.write</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>提交结算申请</td><td><code>settlement.request</code></td><td><input type="checkbox" checked></td></tr>
+            <tr><td>审批结算单</td><td><code>settlement.approve</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>查看汇总统计</td><td><code>reporting.read</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>登记付款 / 收款</td><td><code>finance.record</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>查看开票状态</td><td><code>finance.invoice.read</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>管理组内成员</td><td><code>member.manage</code></td><td><input type="checkbox"></td></tr>
+            <tr><td>维护辅助字典</td><td><code>dictionary.manage</code></td><td><input type="checkbox" checked></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button class="btn primary">保存权限</button>
+          <button class="btn">重置为默认</button>
+        </div>
+        <div class="footnote">前两项是子账号的默认能力，不可取消勾选。</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <header><h3>默认权限矩阵</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>能力</th><th>主账号</th><th>子账号</th></tr></thead>
+          <tbody>
+            <tr><td>查看组内全部业务</td><td><span class="badge ok">是</span></td><td>按授权</td></tr>
+            <tr><td>邀请 / 停用 / 移除组员</td><td><span class="badge ok">是</span></td><td><span class="badge danger">否</span></td></tr>
+            <tr><td>配置子账号权限</td><td><span class="badge ok">是</span></td><td><span class="badge danger">否</span></td></tr>
+            <tr><td>创建业务单据</td><td><span class="badge ok">是</span></td><td><span class="badge ok">是</span></td></tr>
+            <tr><td>查看 / 编辑本人单据</td><td><span class="badge ok">是</span></td><td><span class="badge ok">是</span></td></tr>
+            <tr><td>查看 / 编辑他人单据</td><td><span class="badge ok">是</span></td><td>按授权</td></tr>
+            <tr><td>查看汇总</td><td><span class="badge ok">是</span></td><td>按授权</td></tr>
+            <tr><td>审批结算</td><td><span class="badge ok">是</span></td><td>按授权</td></tr>
+            <tr><td>变更主账号</td><td><span class="badge danger">否</span></td><td><span class="badge danger">否</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 17 邀请码 ============ -->
+<section class="section" id="s-invite"
+  data-title="17 · 邀请码管理（主账号）" data-sub="邀请码是一次性的：签发时返回明文，之后可由主账号在有效期内再次查看明文，撤销或使用后立即不可再查看。库中只保存密文与哈希。">
+  <div class="note warn">安全约束：查看明文的响应固定带 <code>no-store</code>；客户端展示后必须立即清除本地副本；邀请码被撤销、使用或过期后，再次查看返回 <code>INVITATION_NOT_REVEALABLE</code>。</div>
+  <div class="card">
+    <header><h3>签发邀请码</h3></header>
+    <div class="body">
+      <div class="row c3">
+        <label class="field"><span>有效期（天）</span><input type="number" value="3"></label>
+        <div style="align-self:end"><button class="btn primary">签发</button></div>
+      </div>
+      <div class="note plain" style="margin:0">默认有效期 7 天，允许范围 1–30 天。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>邀请码列表</h3><div class="spacer"></div>
+      <div class="seg"><button class="active">全部</button><button>有效</button><button>已过期</button><button>已使用</button><button>已撤销</button></div>
+    </header>
+    <div class="body tight">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>状态</th><th>邀请码</th><th>签发时间</th><th>过期时间</th><th>使用 / 撤销</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="num">#31</td><td><span class="badge ok">有效</span></td>
+              <td><span class="masked">••••••••••••••••••••</span></td>
+              <td class="num">09-22 09:00</td><td class="num">09-25 09:00</td><td>—</td>
+              <td><button class="btn sm">查看明文</button><button class="btn sm danger">撤销</button></td>
+            </tr>
+            <tr>
+              <td class="num">#30</td><td><span class="badge">已使用</span></td>
+              <td><span class="masked">••••••••••••••••••••</span></td>
+              <td class="num">09-18 10:22</td><td class="num">09-21 10:22</td><td class="num">09-19 由 sales-wang 使用</td>
+              <td><span class="badge">不可查看</span></td>
+            </tr>
+            <tr>
+              <td class="num">#29</td><td><span class="badge danger">已撤销</span></td>
+              <td><span class="masked">••••••••••••••••••••</span></td>
+              <td class="num">09-15 08:30</td><td class="num">09-22 08:30</td><td class="num">09-16 由主账号撤销</td>
+              <td><span class="badge">不可查看</span></td>
+            </tr>
+            <tr>
+              <td class="num">#28</td><td><span class="badge warn">已过期</span></td>
+              <td><span class="masked">••••••••••••••••••••</span></td>
+              <td class="num">09-01 09:00</td><td class="num">09-08 09:00</td><td>—</td>
+              <td><span class="badge">不可查看</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:14px 16px">
+        <div class="card" style="margin:0;border-color:var(--brand)">
+          <header><h3>查看明文（#31）</h3><div class="spacer"></div><span class="badge warn">10 秒后自动隐藏</span></header>
+          <div class="body">
+            <div class="num" style="font-size:15px;background:var(--panel-2);border:1px dashed var(--brand);
+              border-radius:8px;padding:10px 12px;word-break:break-all">invitation-code-placeholder-32-bytes</div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn sm">复制</button><button class="btn sm">关闭</button>
+            </div>
+            <div class="footnote">关闭后立即清空内存中的明文，不写入日志、不进入本地缓存。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 18 字典 ============ -->
+<section class="section" id="s-dict"
+  data-title="18 · 辅助填写字典" data-sub="维护进项公司、客户及联系电话、品名、型号、单位、出货单位。型号必须挂在品名下；条目停用后不再出现在候选中，但历史单据保留当时的文本快照。">
+  <div class="grid two">
+    <div class="card">
+      <header><h3>字典条目</h3><div class="spacer"></div>
+        <select style="width:auto"><option>品名</option><option>型号</option><option>进项公司</option><option>客户</option><option>单位</option><option>出货单位</option></select>
+        <button class="btn sm primary">＋ 新增</button></header>
+      <div class="body tight">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>类型</th><th>名称</th><th>父级（品名）</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge brand">品名</span></td><td>螺纹钢</td><td>—</td><td><span class="badge ok">启用</span></td><td><button class="btn sm">编辑</button><button class="btn sm danger">停用</button></td></tr>
+              <tr><td><span class="badge brand">品名</span></td><td>盘螺</td><td>—</td><td><span class="badge ok">启用</span></td><td><button class="btn sm">编辑</button><button class="btn sm danger">停用</button></td></tr>
+              <tr><td><span class="badge">型号</span></td><td>HRB400 Φ20</td><td>螺纹钢</td><td><span class="badge ok">启用</span></td><td><button class="btn sm">编辑</button><button class="btn sm danger">停用</button></td></tr>
+              <tr><td><span class="badge">型号</span></td><td>HRB400 Φ8</td><td>盘螺</td><td><span class="badge ok">启用</span></td><td><button class="btn sm">编辑</button><button class="btn sm danger">停用</button></td></tr>
+              <tr><td><span class="badge">型号</span></td><td>Q235B Φ16</td><td>圆钢</td><td><span class="badge danger">停用</span></td><td><button class="btn sm">编辑</button><button class="btn sm">启用</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>型号按品名归集</h3></header>
+      <div class="body">
+        <div class="note plain">选择或输入品名「盘螺」后，型号候选只展示盘螺下的规格，不展示全部型号。</div>
+        <label class="field"><span>品名</span><input type="text" value="盘螺"></label>
+        <div style="font-size:11.5px;color:var(--text-2);margin-bottom:5px">可选型号</div>
+        <div class="chips"><span class="chip active">HRB400 Φ8</span><span class="chip">HRB400 Φ10</span><span class="chip">HRB500 Φ8</span></div>
+        <div class="note plain" style="margin-top:12px">父级被停用时，其下型号一并从候选中隐藏，但历史单据中的文本快照不变。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 19 平台治理 ============ -->
+<section class="section" id="s-platform"
+  data-title="19 · 公司 / 组治理（平台运营）" data-sub="平台运营创建、停用公司 / 组，并为组指定或更换唯一主账号。平台账号不是组内成员，不默认拥有租户业务数据权限。">
+  <div class="card">
+    <header><h3>创建公司与主账号</h3></header>
+    <div class="body">
+      <div class="row c4">
+        <label class="field"><span>公司 / 组名称 <b class="req">*</b></span><input type="text" placeholder="例如：钢铁贸易一组"></label>
+        <label class="field"><span>主账号登录名 <b class="req">*</b></span><input type="text" placeholder="group-owner-one"></label>
+        <label class="field"><span>主账号姓名 <b class="req">*</b></span><input type="text" placeholder="一组主账号"></label>
+        <label class="field"><span>初始密码（≥8 位）<b class="req">*</b></span><input type="password" placeholder="password-placeholder"></label>
+      </div>
+      <button class="btn primary">创建公司与主账号</button>
+      <div class="footnote">创建出的主账号带 must_change_password 标记，首次登录必须改密；组名或账号名重复分别返回 <code>GROUP_NAME_EXISTS</code>、<code>USER_USERNAME_EXISTS</code>。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h3>公司 / 组列表</h3><div class="spacer"></div>
+      <input type="text" placeholder="按组名搜索" style="width:160px">
+      <select style="width:auto"><option>全部状态</option><option>正常</option><option>已停用</option></select>
+      <button class="btn sm">查询</button>
+    </header>
+    <div class="body tight">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ID</th><th>组名称</th><th>主账号</th><th>状态</th><th class="num">成员数</th><th class="num">版本</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="num">21</td><td><b>钢铁贸易一组</b></td>
+              <td>一组主账号<div class="num" style="color:var(--text-3);font-size:11.5px">group-owner-one</div></td>
+              <td><span class="badge ok">正常</span></td><td class="num">4</td><td class="num">3</td><td class="num">2026-07-24</td>
+              <td><button class="btn sm">查看详情</button><button class="btn sm danger">停用</button><button class="btn sm">交接主账号</button></td>
+            </tr>
+            <tr>
+              <td class="num">22</td><td><b>钢铁贸易二组</b></td>
+              <td>二组主账号<div class="num" style="color:var(--text-3);font-size:11.5px">group-owner-two</div></td>
+              <td><span class="badge ok">正常</span></td><td class="num">7</td><td class="num">1</td><td class="num">2026-08-01</td>
+              <td><button class="btn sm">查看详情</button><button class="btn sm danger">停用</button><button class="btn sm">交接主账号</button></td>
+            </tr>
+            <tr>
+              <td class="num">23</td><td><b>试点公司</b></td>
+              <td>试点主账号<div class="num" style="color:var(--text-3);font-size:11.5px">pilot-owner</div></td>
+              <td><span class="badge danger">已停用</span></td><td class="num">2</td><td class="num">5</td><td class="num">2026-06-11</td>
+              <td><button class="btn sm">查看详情</button><button class="btn sm">启用</button><button class="btn sm">交接主账号</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <header><h3>组详情与治理</h3></header>
+      <div class="body">
+        <dl class="kv">
+          <dt>组名称</dt><dd><b>钢铁贸易一组</b></dd>
+          <dt>状态</dt><dd><span class="badge ok">正常</span></dd>
+          <dt>主账号</dt><dd>一组主账号（group-owner-one）</dd>
+          <dt>成员分布</dt><dd>正常 3 · 已停用 1 · 已移除 0</dd>
+          <dt>当前版本</dt><dd class="num">3</dd>
+          <dt>创建时间</dt><dd class="num">2026-07-24 19:49</dd>
+        </dl>
+        <div style="margin-top:14px;display:flex;gap:8px">
+          <button class="btn danger">停用该组</button>
+          <button class="btn">交接主账号</button>
+          <button class="btn">刷新</button>
+        </div>
+        <div class="footnote">停用该组会在同一事务里撤销组内全部刷新会话，所有在线成员下次续期即失效。</div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>主账号交接</h3></header>
+      <div class="body">
+        <div class="chips" style="margin-bottom:12px"><span class="chip active">提升现有成员</span><span class="chip">新建账号并设为主账号</span></div>
+        <label class="field"><span>选择成员</span>
+          <select><option>王业务（sales-wang）</option><option>财务李（finance-li）</option></select></label>
+        <label class="field"><span>当前版本（乐观锁）</span><input type="number" value="3"></label>
+        <button class="btn primary">确认交接</button>
+        <div class="note warn" style="margin-top:12px">交接后：原主账号降级为普通成员并被停用、其权限记录清空；新主账号升格为 owner；两人的刷新会话都会被撤销，需要重新登录。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 20 规则 ============ -->
+<section class="section" id="s-rules"
+  data-title="20 · 计算与状态规则汇总" data-sub="把散落在各屏的硬规则集中列出来，作为实现与验收的共同依据。">
+  <div class="grid two">
+    <div class="card">
+      <header><h3>金额与数量</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>规则</th><th>定义</th></tr></thead>
+          <tbody>
+            <tr><td>明细金额</td><td>单价 × 数量</td></tr>
+            <tr><td>公司 / 客户小计</td><td>该分组下全部明细金额之和</td></tr>
+            <tr><td>单据总额</td><td>全部小计之和</td></tr>
+            <tr><td>含税 / 不含税</td><td>只作记录与展示，一期不改变金额公式</td></tr>
+            <tr><td>重量</td><td>独立业务字段，不参与金额计算</td></tr>
+            <tr><td>金额存储</td><td>MySQL DECIMAL 或整数分，禁止二进制浮点累计</td></tr>
+            <tr><td>人民币大写</td><td>桌面端自动生成，如 RMB壹拾肆万陆仟玖佰捌拾贰元叁角叁分</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>状态与并发</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>对象</th><th>状态 / 规则</th></tr></thead>
+          <tbody>
+            <tr><td>单据</td><td>草稿 → 已提交</td></tr>
+            <tr><td>结算单</td><td>待审批 → 审批通过 / 审批驳回（驳回必填原因）</td></tr>
+            <tr><td>组成员</td><td>正常 / 已停用 / 已移除</td></tr>
+            <tr><td>公司组</td><td>正常 / 已停用（停用连带撤销会话）</td></tr>
+            <tr><td>邀请码</td><td>有效 / 已过期 / 已使用 / 已撤销</td></tr>
+            <tr><td>乐观锁</td><td>更新携带 version；不匹配返回 RESOURCE_VERSION_CONFLICT，不静默覆盖</td></tr>
+            <tr><td>幂等</td><td>写请求携带 Idempotency-Key，重复提交不产生重复单据</td></tr>
+            <tr><td>组隔离</td><td>所有业务查询强制附带 group_id 条件</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>辅助填写</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>项目</th><th>规则</th></tr></thead>
+          <tbody>
+            <tr><td>覆盖范围</td><td>进项公司、客户及电话、品名、型号、单位、出货单位</td></tr>
+            <tr><td>型号归属</td><td>型号必须挂在品名下，候选只展示该品名的型号</td></tr>
+            <tr><td>三种模式</td><td>纯净（不联想）/ 联想（输入即匹配）/ 辅助（只能选，禁自由输入）</td></tr>
+            <tr><td>停用条目</td><td>不再出现在候选，但历史单据保留文本快照</td></tr>
+            <tr><td>日期输入</td><td>空格分隔也可识别，如 2026 3 14 → 2026-03-14</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <header><h3>权限与审计</h3></header>
+      <div class="body tight">
+        <table>
+          <thead><tr><th>项目</th><th>规则</th></tr></thead>
+          <tbody>
+            <tr><td>判定维度</td><td>会话 → 组范围 → 资源归属 → 功能权限 → 数据范围 → 单据状态</td></tr>
+            <tr><td>前端角色</td><td>只隐藏入口，不承担鉴权</td></tr>
+            <tr><td>审计动作</td><td>创建、修改、删除、恢复、提交、审批、授权、主账号变更</td></tr>
+            <tr><td>审计字段</td><td>操作者、组、目标资源、动作、时间、变更摘要</td></tr>
+            <tr><td>审计约束</td><td>只追加，普通业务用户不能修改或删除</td></tr>
+            <tr><td>日志脱敏</td><td>不记录密码、完整令牌、银行卡完整卡号</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <header><h3>一期验收闭环</h3></header>
+    <div class="body">
+      <div class="flow">
+        <span class="step">1 登录并入组</span><span class="arrow">→</span>
+        <span class="step">2 建入库 / 出库单</span><span class="arrow">→</span>
+        <span class="step">3 自动算金额与大写</span><span class="arrow">→</span>
+        <span class="step">4 三模式辅助填写</span><span class="arrow">→</span>
+        <span class="step">5 离线草稿联网同步不重复</span><span class="arrow">→</span>
+        <span class="step">6 勾选源单据申请结算</span><span class="arrow">→</span>
+        <span class="step">7 后台生成并审批</span><span class="arrow">→</span>
+        <span class="step">8 业务员看审批结果</span><span class="arrow">→</span>
+        <span class="step">9 后台按年月 / 业务员看汇总</span><span class="arrow">→</span>
+        <span class="step">10 越权被拒且可审计</span><span class="arrow">→</span>
+        <span class="step">11 Web 与其他端数据一致</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+
+
+</main>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 1. 侧边导航与主题切换 ---------- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.section'));
+  var navItems = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  var titleEl = document.getElementById('pageTitle');
+  var subEl = document.getElementById('pageSub');
+
+  function show(id) {
+    var target = document.getElementById(id);
+    if (!target) return;
+    sections.forEach(function (s) { s.classList.toggle('active', s === target); });
+    navItems.forEach(function (b) { b.classList.toggle('active', b.dataset.go === id); });
+    titleEl.textContent = target.dataset.title || '';
+    subEl.textContent = target.dataset.sub || '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // 所有带 data-go 的元素都能跳转：侧栏、卡片内的按钮、手机里的返回箭头都复用同一套逻辑。
+  document.addEventListener('click', function (event) {
+    var trigger = event.target.closest('[data-go]');
+    if (trigger) {
+      event.preventDefault();
+      show(trigger.dataset.go);
+      return;
+    }
+    // 手机底栏与 chip 的单选行为：同一容器内只保留一个 active。
+    var nav = event.target.closest('.phone .bottom-nav div');
+    if (nav) {
+      Array.prototype.forEach.call(nav.parentElement.children, function (d) { d.classList.remove('active'); });
+      nav.classList.add('active');
+    }
+    var chip = event.target.closest('.chip');
+    if (chip && chip.parentElement.classList.contains('chips')) {
+      Array.prototype.forEach.call(chip.parentElement.children, function (c) { c.classList.remove('active'); });
+      chip.classList.add('active');
+    }
+  });
+
+  document.getElementById('themeSeg').addEventListener('click', function (event) {
+    var btn = event.target.closest('button[data-theme]');
+    if (!btn) return;
+    document.documentElement.dataset.theme = btn.dataset.theme;
+    Array.prototype.forEach.call(btn.parentElement.children, function (b) { b.classList.toggle('active', b === btn); });
+  });
+
+  /* ---------- 2. 金额工具 ---------- */
+  function parseAmount(text) {
+    var cleaned = String(text == null ? '' : text).replace(/[^0-9.\-]/g, '');
+    var value = Number(cleaned);
+    return Number.isFinite(value) ? value : 0;
+  }
+  function formatAmount(value) {
+    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function ymdKey(prefix, index) {
+    return prefix + ':' + index;
+  }
+
+  // 人民币大写：一期验收要求桌面端自动生成，如「RMB壹拾肆万陆仟玖佰捌拾贰元叁角叁分」。
+  // 算法分三步：按万/亿分节、节内按拾佰仟逐位取字、节间与角分处补「零」。
+  var RMB_DIGITS = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
+  var RMB_UNITS = ['', '拾', '佰', '仟'];
+  var RMB_SECTIONS = ['', '万', '亿', '万亿'];
+
+  // 把一个 0–9999 的节转成字串（不带节单位），节内连续零只保留一个，且不留尾零。
+  function rmbSection(section) {
+    var text = '';
+    var unitIndex = 0;
+    var zeroPending = false;
+    while (section > 0) {
+      var digit = section % 10;
+      section = Math.floor(section / 10);
+      if (digit === 0) {
+        if (text !== '') zeroPending = true;
+      } else {
+        if (zeroPending) { text = '零' + text; zeroPending = false; }
+        text = RMB_DIGITS[digit] + RMB_UNITS[unitIndex] + text;
+      }
+      unitIndex++;
+    }
+    return text;
+  }
+
+  function rmbUpper(amount) {
+    var negative = amount < 0;
+    var cents = Math.round(Math.abs(amount) * 100);
+    if (cents === 0) return 'RMB零元整';
+
+    var integer = Math.floor(cents / 100);
+    var fraction = cents % 100;
+
+    // 从高位节往低位节拼接；某个非零节的千位为 0（值 < 1000）时，它与高位之间要补一个「零」。
+    var sectionTexts = [];
+    var rest = integer;
+    var sectionIndex = 0;
+    while (rest > 0) {
+      sectionTexts.push({ value: rest % 10000, unit: RMB_SECTIONS[sectionIndex] });
+      rest = Math.floor(rest / 10000);
+      sectionIndex++;
+    }
+
+    var integerText = '';
+    for (var i = sectionTexts.length - 1; i >= 0; i--) {
+      var item = sectionTexts[i];
+      if (item.value === 0) continue;
+      var piece = rmbSection(item.value) + item.unit;
+      if (integerText !== '' && item.value < 1000) integerText += '零';
+      integerText += piece;
+    }
+
+    var fractionText;
+    if (fraction > 0) {
+      var jiao = Math.floor(fraction / 10);
+      var fen = fraction % 10;
+      fractionText = '';
+      if (jiao > 0) fractionText += RMB_DIGITS[jiao] + '角';
+      if (fen > 0) {
+        // 有元无角时补「零」，避免出现「壹佰元伍分」这种读不通的写法。
+        if (jiao === 0 && integer > 0) fractionText += '零';
+        fractionText += RMB_DIGITS[fen] + '分';
+      }
+    } else {
+      fractionText = '整';
+    }
+
+    var head = integer === 0 ? '零元' : integerText + '元';
+    return 'RMB' + (negative ? '负' : '') + head + fractionText;
+  }
+
+  /* ---------- 3. 宽表实时计算 ---------- */
+  // 规则与后端保持一致：明细金额 = 单价 × 数量；分组小计 = 组内明细之和；单据总额 = 全部小计之和。
+  // 含税 / 不含税只作展示，不参与公式；重量不参与计算。
+  function wireCalcTable(table) {
+    if (!table || !table.tHead || !table.tBodies.length) return;
+    var headers = Array.prototype.slice.call(table.tHead.rows[0].cells).map(function (c) {
+      return c.textContent.trim();
+    });
+    var colQty = headers.indexOf('数量');
+    var colPrice = headers.indexOf('单价');
+    var colAmount = headers.findIndex(function (h) { return h.indexOf('金额') === 0; });
+    if (colQty < 0 || colPrice < 0 || colAmount < 0) return;
+
+    var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+    var groups = [];
+    var current = null;
+
+    rows.forEach(function (row) {
+      // 第一列带 rowspan 即为新分组的起始行；后续续行在 DOM 里少一个 td，需要整体左移一列。
+      var firstCell = row.cells[0];
+      var offset = 0;
+      if (firstCell && firstCell.hasAttribute('rowspan')) {
+        current = { cell: firstCell, rows: [] };
+        groups.push(current);
+      } else {
+        offset = 1;
+      }
+      if (!current) { current = { cell: null, rows: [] }; groups.push(current); }
+
+      var qtyCell = row.cells[colQty - offset];
+      var priceCell = row.cells[colPrice - offset];
+      var amountCell = row.cells[colAmount - offset];
+      if (!qtyCell || !priceCell || !amountCell) return;
+
+      current.rows.push({ qtyCell: qtyCell, priceCell: priceCell, amountCell: amountCell });
+
+      [qtyCell, priceCell].forEach(function (cell) {
+        var raw = parseAmount(cell.textContent);
+        cell.textContent = raw === 0 && cell.textContent.trim() === '' ? '' : String(raw);
+        cell.contentEditable = 'true';
+        cell.style.background = 'var(--brand-soft)';
+        cell.style.cursor = 'text';
+        cell.title = '可直接编辑，金额会自动重算';
+      });
+    });
+
+    // 渲染分组小计与单据总额，并同步人民币大写。
+    function render() {
+      var grandTotal = 0;
+      groups.forEach(function (group) {
+        var subtotal = 0;
+        group.rows.forEach(function (item) {
+          var qty = parseAmount(item.qtyCell.textContent);
+          var price = parseAmount(item.priceCell.textContent);
+          var amount = Math.round(qty * price * 100) / 100;
+          item.amountCell.textContent = formatAmount(amount);
+          subtotal += amount;
+        });
+        grandTotal += subtotal;
+        if (group.cell) {
+          var badge = group.cell.querySelector('.badge');
+          if (badge) badge.textContent = '小计 ¥' + formatAmount(subtotal);
+        }
+      });
+
+      Array.prototype.forEach.call(table.tFoot ? table.tFoot.rows : [], function (row) {
+        var label = row.cells[0] ? row.cells[0].textContent.trim() : '';
+        if (label.indexOf('总金额') >= 0) {
+          var amountCell = row.cells[1];
+          if (amountCell) amountCell.textContent = formatAmount(grandTotal);
+        } else if (label.indexOf('大写') >= 0) {
+          var upperCell = row.cells[1];
+          if (upperCell) upperCell.textContent = rmbUpper(grandTotal);
+        }
+      });
+    }
+
+    table.addEventListener('input', render);
+    table.addEventListener('blur', function (event) {
+      var cell = event.target.closest('[contenteditable]');
+      if (!cell) return;
+      var value = parseAmount(cell.textContent);
+      cell.textContent = value === 0 ? '0' : String(value);
+      render();
+    }, true);
+    render();
+  }
+
+  wireCalcTable(document.getElementById('inboundWide'));
+  wireCalcTable(document.getElementById('outboundWide'));
+
+  /* ---------- 4. 结算申请预览 ---------- */
+  var previewInbound = document.getElementById('previewInbound');
+  var previewOutbound = document.getElementById('previewOutbound');
+  var previewProfit = document.getElementById('previewProfit');
+  var previewWarn = document.getElementById('previewWarn');
+
+  function renderSettlement() {
+    if (!previewInbound) return;
+    var inbound = 0;
+    var outbound = 0;
+    Array.prototype.forEach.call(document.querySelectorAll('#s-m-settle input[type=checkbox][data-kind]'), function (box) {
+      if (!box.checked) return;
+      var amount = parseAmount(box.dataset.amount);
+      if (box.dataset.kind === 'inbound') inbound += amount;
+      else outbound += amount;
+    });
+    var profit = Math.round((outbound - inbound) * 100) / 100;
+
+    previewInbound.textContent = '¥' + formatAmount(inbound);
+    previewOutbound.textContent = '¥' + formatAmount(outbound);
+    previewProfit.textContent = (profit < 0 ? '−¥' : '¥') + formatAmount(Math.abs(profit));
+    previewProfit.style.color = profit < 0 ? 'var(--danger)' : 'var(--ok)';
+    if (previewWarn) previewWarn.style.display = profit < 0 ? '' : 'none';
+  }
+
+  var settleSection = document.getElementById('s-m-settle');
+  if (settleSection) {
+    settleSection.addEventListener('change', renderSettlement);
+    renderSettlement();
+  }
+})();
+</script>
+</body>
+</html>
