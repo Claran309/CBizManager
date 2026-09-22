@@ -71,6 +71,16 @@ func TestOpenAPIContract(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/settlements/{settlement_id}"},
 		{method: http.MethodPost, path: "/api/v1/settlements/{settlement_id}/approve"},
 		{method: http.MethodPost, path: "/api/v1/settlements/{settlement_id}/reject"},
+		{method: http.MethodPost, path: "/api/v1/finance/payments"},
+		{method: http.MethodGet, path: "/api/v1/finance/payments"},
+		{method: http.MethodPost, path: "/api/v1/finance/payments/{record_id}/revoke"},
+		{method: http.MethodPost, path: "/api/v1/finance/receipts"},
+		{method: http.MethodGet, path: "/api/v1/finance/receipts"},
+		{method: http.MethodPost, path: "/api/v1/finance/receipts/{record_id}/revoke"},
+		{method: http.MethodPost, path: "/api/v1/finance/invoices"},
+		{method: http.MethodGet, path: "/api/v1/finance/invoices"},
+		{method: http.MethodPost, path: "/api/v1/finance/invoices/{record_id}/revoke"},
+		{method: http.MethodGet, path: "/api/v1/finance/statements/{document_id}"},
 		{method: http.MethodGet, path: "/health/live"},
 		{method: http.MethodGet, path: "/health/ready"},
 	}
@@ -370,6 +380,123 @@ func TestOpenAPIContractSettlements(t *testing.T) {
 	if !operationDeclaresErrorCode(reject.Post, "SETTLEMENT_REMARK_REQUIRED") {
 		t.Error("POST /api/v1/settlements/{settlement_id}/reject must declare SETTLEMENT_REMARK_REQUIRED")
 	}
+}
+
+// TestOpenAPIContractFinance 锁定付款 / 收款 / 开票契约的关键约定：
+// 枚举取值、必填字段、幂等键与记录 ID 路径参数，以及「记录类型不可由客户端提交」这一硬约束。
+func TestOpenAPIContractFinance(t *testing.T) {
+	contractPath := filepath.Join("..", "..", "api", "openapi", "cbizdocsmanager-v1.yaml")
+	doc, err := openapi3.NewLoader().LoadFromFile(contractPath)
+	if err != nil {
+		t.Fatalf("load OpenAPI contract %q: %v", contractPath, err)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("validate OpenAPI contract: %v", err)
+	}
+
+	assertTopLevelEnum(t, requireSchema(t, doc, "FinanceRecordKind"), []string{"payment", "receipt", "invoice"})
+	assertTopLevelEnum(t, requireSchema(t, doc, "FinanceMethod"), []string{"transfer", "private_card", "public_account"})
+	// not_applicable 是出库单的合法取值：出库单不存在开票概念，不能返回 none 误导客户端。
+	assertTopLevelEnum(t, requireSchema(t, doc, "InvoiceStatus"), []string{"none", "partial", "full", "not_applicable"})
+
+	recordData := requireSchema(t, doc, "FinanceRecordData")
+	for _, property := range []string{
+		"record_id", "kind", "document_id", "document_kind", "document_no", "party_name",
+		"business_user", "business_date", "amount", "amount_upper", "occurred_on", "created_by", "created_at",
+	} {
+		if !containsString(recordData.Required, property) {
+			t.Errorf("FinanceRecordData must require property %q", property)
+		}
+	}
+
+	statementData := requireSchema(t, doc, "FinanceStatementData")
+	for _, property := range []string{
+		"document_id", "document_kind", "document_no", "party_name", "business_user", "business_date",
+		"total_amount", "total_amount_upper",
+		"paid_amount", "unpaid_amount", "paid_amount_upper", "unpaid_amount_upper",
+		"invoiced_amount", "uninvoiced_amount", "invoiced_amount_upper", "uninvoiced_amount_upper", "invoice_status",
+		"received_amount", "unreceived_amount", "received_amount_upper", "unreceived_amount_upper",
+		"payment_count", "receipt_count", "invoice_count", "records",
+	} {
+		if !containsString(statementData.Required, property) {
+			t.Errorf("FinanceStatementData must require property %q", property)
+		}
+	}
+
+	// 记录里的人员字段必须是完整的用户对象，不能只回填姓名，
+	// 否则客户端按 UserSummary.account_type 枚举校验时会被空串卡住。
+	for _, property := range []string{"business_user", "created_by"} {
+		ref, ok := recordData.Properties[property]
+		if !ok || ref == nil || ref.Ref != "#/components/schemas/UserSummary" {
+			t.Errorf("FinanceRecordData.%s must reference UserSummary", property)
+		}
+	}
+	// 单据结清视图的业务员字段同理。
+	if ref := statementData.Properties["business_user"]; ref == nil || ref.Ref != "#/components/schemas/UserSummary" {
+		t.Error("FinanceStatementData.business_user must reference UserSummary")
+	}
+
+	// 记录类型必须由路由决定：请求体里一旦出现 kind 字段，契约就挡不住「用付款接口写收款」。
+	createRequest := requireSchema(t, doc, "CreateFinanceRecordRequest")
+	for _, property := range []string{"document_id", "amount", "occurred_on"} {
+		if !containsString(createRequest.Required, property) {
+			t.Errorf("CreateFinanceRecordRequest must require property %q", property)
+		}
+	}
+	if _, ok := createRequest.Properties["kind"]; ok {
+		t.Error("CreateFinanceRecordRequest must not declare a kind property")
+	}
+
+	// 三类记录各自都有幂等键、记录 ID 路径参数与撤销分支。
+	for _, path := range []string{
+		"/api/v1/finance/payments",
+		"/api/v1/finance/receipts",
+		"/api/v1/finance/invoices",
+	} {
+		create := doc.Paths.Find(path)
+		if create == nil || create.Post == nil {
+			t.Fatalf("missing operation POST %s", path)
+		}
+		if create.Post.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
+			t.Errorf("POST %s must declare Idempotency-Key header", path)
+		}
+		// 累计超额与类型不匹配是记账最常见的两个失败分支，必须在契约里显式声明。
+		if !operationDeclaresErrorCode(create.Post, "FINANCE_AMOUNT_EXCEEDS") {
+			t.Errorf("POST %s must declare FINANCE_AMOUNT_EXCEEDS", path)
+		}
+		if !operationDeclaresErrorCode(create.Post, "FINANCE_DOCUMENT_MISMATCH") {
+			t.Errorf("POST %s must declare FINANCE_DOCUMENT_MISMATCH", path)
+		}
+		if create.Get == nil {
+			t.Errorf("missing operation GET %s", path)
+		}
+
+		revoke := doc.Paths.Find(path + "/{record_id}/revoke")
+		if revoke == nil || revoke.Post == nil {
+			t.Fatalf("missing operation POST %s/{record_id}/revoke", path)
+		}
+		if revoke.Post.Parameters.GetByInAndName("path", "record_id") == nil {
+			t.Errorf("POST %s/{record_id}/revoke must declare record_id path parameter", path)
+		}
+		// 用错记录类型的接口（例如用收款接口撤销付款）按「记录不存在」处理，客户端据此提示已撤销。
+		if !operationDeclaresErrorCode(revoke.Post, "FINANCE_RECORD_NOT_FOUND") {
+			t.Errorf("POST %s/{record_id}/revoke must declare FINANCE_RECORD_NOT_FOUND", path)
+		}
+	}
+
+	statement := doc.Paths.Find("/api/v1/finance/statements/{document_id}")
+	if statement == nil || statement.Get == nil {
+		t.Fatal("missing operation GET /api/v1/finance/statements/{document_id}")
+	}
+	if statement.Get.Parameters.GetByInAndName("path", "document_id") == nil {
+		t.Error("GET /api/v1/finance/statements/{document_id} must declare document_id path parameter")
+	}
+
+	// 新增的权限码必须进入目录枚举，否则主账号在权限勾选页面上根本选不到它。
+	assertTopLevelEnum(t, requireSchema(t, doc, "PermissionCode"), []string{
+		"document.view_others", "document.edit_others", "report.view",
+		"member.manage", "dictionary.manage", "settlement.approve", "finance.record",
+	})
 }
 
 // operationDeclaresErrorCode 检查某个操作是否在 4xx 响应的 x-error-codes 里声明了指定错误码。
