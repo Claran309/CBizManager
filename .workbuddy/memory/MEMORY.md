@@ -2,7 +2,7 @@
 
 ## 新增业务模块的标准步骤（Task 4/5/6/7 已验证的配方）
 
-每新增一个业务模块（如 Task 7 的收付款开票），按这个顺序做，一次就能全绿：
+每新增一个业务模块（如 Task 7 的收付款开票、汇总统计），按这个顺序做，一次就能全绿：
 
 1. **迁移**：`backend/migrations/00000N_<name>.{up,down}.sql`。表设计三件套 —— 金额列一律
    `DECIMAL(18,2)`（数量 18,3 / 单价 18,4）、`group_id` 必带且加索引、状态列用 ENUM。
@@ -56,6 +56,16 @@
   不要让 GORM 取墙上时间——否则「按 created_at 过滤月份」会与按注入时钟生成的单号月份错位。
 - **审计**：写 `audit_logs`（`group_id/operator_user_id/action/resource_type/resource_id/summary/created_at`），
   摘要由仓储在拿到单号后统一拼装。
+- **汇总统计（reporting）特有口径**：
+  - **只有「看全组」一种数据范围，无权限直接 403**（不是返回空报表——空报表会让人误以为「本月确实没数据」）。
+    权限复用 `report.view`（看板与生成总结算共用一个码）。
+  - **只统计 `status=submitted`**；已付 / 已收 / 已开金额**不按发生日期过滤**（取余额口径）；
+    **未结清单据数逐单比较**（总额相减会被多付/少付互相抵消而藏匿）。
+  - **明细行不含已付 / 未付**：付款挂在单据而非明细，摊派到明细是「假精确」。合计块才是单据粒度精确值。
+  - **比率一律用百万分之一整数（ppm）**：`207500 = 20.75%`，`big.Int` 先乘 1e6 再四舍五入；展示文本由服务端给。
+  - **快照即冻结**：`report_snapshots` 与 `settlements` 分开两张表（快照无审批流、不占用源单据）；
+    快照无 `version` 列、无修改接口，要更正只能重新生成。业务员姓名随快照冻结落库。
+  - 单号 `ZJS + YYYYMM + -4位当月序号`；**批次号取本批第一张快照的单号**；**审计逐张写**（不是整批一条）。
 
 ## 环境坑（本机 / 本会话实测）
 
@@ -70,5 +80,12 @@
   但随后 `git show-ref` 里**看不到** `refs/remotes/origin/main`，`git branch -vv` 会显示
   `[origin/main: gone]`。这是显示残留、**不代表远端丢提交**。核对是否已推送请用
   `git ls-remote origin refs/heads/main` 与本地 `git rev-parse HEAD` 直接比对哈希。
-- 本机 Docker Desktop 引擎未启动，`go test -tags integration` 一律门控 SKIP；
-  要跑真实集成需先起 Docker Desktop 并设 `TEST_MYSQL_DSN`。
+- 本机 **Docker 完全不可用**（不只是引擎未启动）：`Get-Command docker` 与 `com.docker.service` 都查不到，
+  所以 `go test -tags integration` 一律门控 SKIP。
+  **替代验证手段**：集成测试里手算的期望值，可以在被测包内临时写一个只跑纯函数 / 纯聚合的测试文件，
+  用同一批数据喂真实函数逐项比对（如 reporting 用 `newPeriodTotals` / `buildOverviewData` 复核
+  毛利率与三类占比），通过后删除临时文件。DB 方言层（DECIMAL 回读、聚合排序、序号生成）仍需真 MySQL 才能覆盖。
+- 集成测试夹具易错点：出库单**提交时必须带 `sale_amount_type`**（否则 `DOCUMENT_INCOMPLETE`），
+  共享 helper 造出库单别漏这个字段。
+- 集成测试断言易错点：`created_at` 列是 `DATETIME(6)`（微秒），而代码里用的是纳秒时钟，
+  **不要逐位比较时间**，改成「差在一毫秒以内」判定。
