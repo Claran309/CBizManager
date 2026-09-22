@@ -18,6 +18,8 @@ tags:
     description: 结算单与单级审批
   - name: Finance
     description: 付款、收款与开票
+  - name: Reports
+    description: 汇总统计与月度总结算
   - name: Health
     description: 服务健康检查
 security:
@@ -2845,6 +2847,361 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/reports/overview:
+    get:
+      tags: [Reports]
+      operationId: getReportOverview
+      summary: 后台数据汇总看板
+      description: 按月份返回入库 / 出库 / 毛利润 / 未付款 / 未开票 / 未收款等合计指标与三类销售金额分项。只统计已提交单据，草稿、作废、跨月与跨组单据一律排除。已付 / 已开 / 已收为余额口径，不按发生日期过滤；未结清数为逐单比较结果。汇总模块只有「看全组」一种数据范围，子账号未持有 report.view 权限时直接返回 FORBIDDEN。
+      parameters:
+        - name: period
+          in: query
+          description: 统计月份，形如 2026-09；缺省取服务端当前月份
+          schema:
+            type: string
+        - name: business_user_id
+          in: query
+          description: 只看该业务员经手的单据
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportOverviewApiResponse'
+        '400':
+          description: 统计月份格式非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/reports/inbound-stats:
+    get:
+      tags: [Reports]
+      operationId: getReportInboundStats
+      summary: 入库统计
+      description: 返回入库单据的金额总计、已付 / 未付款合计与未付清单据数，以及按往来单位 + 品名 + 型号 + 单位聚合的明细。已付 / 未付为余额口径，不按付款发生日期过滤。付款记录挂在单据而不是明细行上，因此明细行只给金额与数量，不摊派已付 / 未付。
+      parameters:
+        - name: period
+          in: query
+          description: 统计月份，形如 2026-09；缺省取服务端当前月份
+          schema:
+            type: string
+        - name: business_user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: party_name
+          in: query
+          description: 按往来单位名称模糊过滤
+          schema:
+            type: string
+        - name: product_name
+          in: query
+          description: 按品名模糊过滤
+          schema:
+            type: string
+        - name: product_model
+          in: query
+          description: 按型号模糊过滤
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportInboundStatsApiResponse'
+        '400':
+          description: 统计月份或分页参数非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/reports/outbound-stats:
+    get:
+      tags: [Reports]
+      operationId: getReportOutboundStats
+      summary: 出库统计
+      description: 返回出库单据的金额总计、已收 / 未收款合计与未收清单据数、三类销售金额分项，以及按往来单位 + 品名 + 型号 + 单位聚合的明细。已收 / 未收为余额口径，不按收款发生日期过滤。
+      parameters:
+        - name: period
+          in: query
+          description: 统计月份，形如 2026-09；缺省取服务端当前月份
+          schema:
+            type: string
+        - name: business_user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: party_name
+          in: query
+          description: 按往来单位名称模糊过滤
+          schema:
+            type: string
+        - name: product_name
+          in: query
+          description: 按品名模糊过滤
+          schema:
+            type: string
+        - name: product_model
+          in: query
+          description: 按型号模糊过滤
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportOutboundStatsApiResponse'
+        '400':
+          description: 统计月份或分页参数非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/reports/business-users:
+    get:
+      tags: [Reports]
+      operationId: listReportBusinessUsers
+      summary: 业务员维度利润统计
+      description: 按业务员返回入库合计、出库合计与毛利润，并给出全组合计行。只统计已提交单据。
+      parameters:
+        - name: period
+          in: query
+          description: 统计月份，形如 2026-09；缺省取服务端当前月份
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportBusinessUsersApiResponse'
+        '400':
+          description: 统计月份格式非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/reports/summary-settlements:
+    post:
+      tags: [Reports]
+      operationId: createReportSnapshots
+      summary: 生成月度总结算快照
+      description: 冻结指定周期内的汇总口径，生成一张或多张总结算快照。scope = company 生成公司维度一张；scope = business_user 且不带 business_user_id 时为该周期内所有有单据的业务员各生成一张，带上 business_user_id 时只生成指定业务员那一张。快照一旦生成即冻结，源单据后续修改不影响已生成数值。周期内没有任何已提交单据时返回 REPORT_PERIOD_EMPTY。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreateSnapshotRequest'
+      responses:
+        '201':
+          description: 生成成功，返回本批次的全部快照
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCreateSnapshotApiResponse'
+        '400':
+          description: 请求参数错误或周期内没有可结算单据（VALIDATION_FAILED / REPORT_PERIOD_EMPTY）
+          x-error-codes: [VALIDATION_FAILED, REPORT_PERIOD_EMPTY]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 幂等键被复用（IDEMPOTENCY_KEY_REUSED）
+          x-error-codes: [IDEMPOTENCY_KEY_REUSED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Reports]
+      operationId: listReportSnapshots
+      summary: 分页查询总结算快照
+      parameters:
+        - name: period
+          in: query
+          description: 按结算周期过滤，形如 2026-09
+          schema:
+            type: string
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/ReportScope'
+        - name: business_user_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - $ref: '#/components/parameters/PageQuery'
+        - $ref: '#/components/parameters/PageSizeQuery'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSnapshotPageApiResponse'
+        '400':
+          description: 查询参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/reports/summary-settlements/{snapshot_id}:
+    get:
+      tags: [Reports]
+      operationId: getReportSnapshot
+      summary: 读取一张总结算快照
+      parameters:
+        - $ref: '#/components/parameters/SnapshotIDPath'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSnapshotApiResponse'
+        '400':
+          description: 快照 ID 非法（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无 report.view 权限（FORBIDDEN）
+          x-error-codes: [FORBIDDEN]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 快照不存在或不属于当前组（REPORT_SNAPSHOT_NOT_FOUND）
+          x-error-codes: [REPORT_SNAPSHOT_NOT_FOUND]
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /health/live:
     get:
       tags: [Health]
@@ -2958,6 +3315,15 @@ components:
         type: integer
         format: int64
         minimum: 1
+    SnapshotIDPath:
+      name: snapshot_id
+      in: path
+      required: true
+      description: 总结算快照主键 ID；不属于当前组时按「不存在」处理。
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
@@ -3049,6 +3415,8 @@ components:
         - FINANCE_RECORD_NOT_FOUND
         - FINANCE_DOCUMENT_MISMATCH
         - FINANCE_AMOUNT_EXCEEDS
+        - REPORT_SNAPSHOT_NOT_FOUND
+        - REPORT_PERIOD_EMPTY
         - SETTLEMENT_NOT_FOUND
         - SETTLEMENT_STATUS_INVALID
         - SETTLEMENT_SOURCE_INVALID
@@ -4902,3 +5270,544 @@ components:
           type: string
           maxLength: 500
           nullable: true
+    ReportScope:
+      type: string
+      description: 总结算快照的统计维度。
+      enum: [company, business_user]
+    ReportSaleAmountTotal:
+      type: object
+      additionalProperties: false
+      description: 一类销售金额的分项统计。顺序固定为 Y-1 / y-N / N，占比分母为出库合计。
+      required: [sale_amount_type, amount, amount_upper, share_ppm, share_percent]
+      properties:
+        sale_amount_type:
+          $ref: '#/components/schemas/SaleAmountType'
+        amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        amount_upper:
+          type: string
+        share_ppm:
+          type: integer
+          format: int64
+          description: 占出库合计的百万分之一比值（652000 表示 65.20%）。
+        share_percent:
+          type: string
+          description: 占比展示文本，两位小数（如 "65.20"）。
+    ReportItem:
+      type: object
+      additionalProperties: false
+      description: 按「往来单位 + 品名 + 型号 + 单位」聚合的明细行。只给金额与数量，不给已付 / 未付：付款挂在单据上，无法分摊到明细行。
+      required: [party_name, product_name, document_count, quantity, amount, amount_upper]
+      properties:
+        party_name:
+          type: string
+        product_name:
+          type: string
+        product_model:
+          type: string
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        quantity:
+          type: string
+          description: 数量定点字符串（千分之一精度）。
+        amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        amount_upper:
+          type: string
+    ReportOverviewData:
+      type: object
+      additionalProperties: false
+      description: 后台数据汇总看板。只统计已提交单据。已付 / 已开 / 已收为余额口径，不按发生日期过滤；未结清数为逐单比较结果。
+      required:
+        - period
+        - inbound_document_count
+        - inbound_amount
+        - inbound_amount_upper
+        - outbound_document_count
+        - outbound_amount
+        - outbound_amount_upper
+        - gross_profit
+        - gross_profit_upper
+        - gross_margin_ppm
+        - gross_margin_percent
+        - paid_amount
+        - unpaid_amount
+        - unpaid_amount_upper
+        - unpaid_document_count
+        - invoiced_amount
+        - uninvoiced_amount
+        - uninvoiced_amount_upper
+        - uninvoiced_document_count
+        - received_amount
+        - unreceived_amount
+        - unreceived_amount_upper
+        - unreceived_document_count
+        - supplier_count
+        - customer_count
+        - sale_amount_types
+      properties:
+        period:
+          type: string
+        inbound_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        inbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        inbound_amount_upper:
+          type: string
+        outbound_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        outbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        outbound_amount_upper:
+          type: string
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+          description: 毛利润 = 出库销售合计 − 入库进项合计，允许为负。
+        gross_profit_upper:
+          type: string
+        gross_margin_ppm:
+          type: integer
+          format: int64
+          description: 毛利率，百万分之一整数（207500 表示 20.75%）。
+        gross_margin_percent:
+          type: string
+          description: 毛利率展示文本，两位小数。
+        paid_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unpaid_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unpaid_amount_upper:
+          type: string
+        unpaid_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        invoiced_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        uninvoiced_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        uninvoiced_amount_upper:
+          type: string
+        uninvoiced_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        received_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unreceived_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unreceived_amount_upper:
+          type: string
+        unreceived_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        supplier_count:
+          type: integer
+          format: int64
+          minimum: 0
+        customer_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sale_amount_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSaleAmountTotal'
+    ReportInboundStatsData:
+      type: object
+      additionalProperties: false
+      description: 入库统计。合计块是单据粒度的精确数字；明细行只给金额与数量，不摊派已付 / 未付。
+      required:
+        - period
+        - document_count
+        - amount_total
+        - amount_total_upper
+        - paid_amount
+        - unpaid_amount
+        - unpaid_amount_upper
+        - unpaid_document_count
+        - invoiced_amount
+        - uninvoiced_amount
+        - uninvoiced_amount_upper
+        - uninvoiced_document_count
+        - supplier_count
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        period:
+          type: string
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        amount_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        amount_total_upper:
+          type: string
+        paid_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unpaid_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unpaid_amount_upper:
+          type: string
+        unpaid_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        invoiced_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        uninvoiced_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        uninvoiced_amount_upper:
+          type: string
+        uninvoiced_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        supplier_count:
+          type: integer
+          format: int64
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportItem'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    ReportOutboundStatsData:
+      type: object
+      additionalProperties: false
+      description: 出库统计。合计块是单据粒度的精确数字；明细行只给金额与数量，不摊派已收 / 未收。
+      required:
+        - period
+        - document_count
+        - amount_total
+        - amount_total_upper
+        - received_amount
+        - unreceived_amount
+        - unreceived_amount_upper
+        - unreceived_document_count
+        - customer_count
+        - sale_amount_types
+        - items
+        - page
+        - page_size
+        - total
+      properties:
+        period:
+          type: string
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        amount_total:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        amount_total_upper:
+          type: string
+        received_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unreceived_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        unreceived_amount_upper:
+          type: string
+        unreceived_document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        customer_count:
+          type: integer
+          format: int64
+          minimum: 0
+        sale_amount_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSaleAmountTotal'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportItem'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    ReportBusinessUserSummary:
+      type: object
+      additionalProperties: false
+      description: 单个业务员的利润统计行。
+      required: [business_user, inbound_amount, outbound_amount, gross_profit, gross_profit_upper, document_count]
+      properties:
+        business_user:
+          $ref: '#/components/schemas/UserSummary'
+        inbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        outbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit_upper:
+          type: string
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+    ReportBusinessUserTotals:
+      type: object
+      additionalProperties: false
+      description: 业务员利润统计的合计行。
+      required: [inbound_amount, outbound_amount, gross_profit, gross_profit_upper, document_count]
+      properties:
+        inbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        outbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit_upper:
+          type: string
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+    ReportBusinessUsersData:
+      type: object
+      additionalProperties: false
+      required: [period, items, summary]
+      properties:
+        period:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportBusinessUserSummary'
+        summary:
+          $ref: '#/components/schemas/ReportBusinessUserTotals'
+    ReportSnapshotData:
+      type: object
+      additionalProperties: false
+      description: 一张月度总结算快照。生成即冻结：源单据后续修改或作废都不会改变已生成数值，因此没有 version 字段，也不提供修改接口。
+      required:
+        - snapshot_id
+        - snapshot_no
+        - batch_no
+        - scope
+        - period
+        - business_user
+        - inbound_amount
+        - inbound_amount_upper
+        - outbound_amount
+        - outbound_amount_upper
+        - gross_profit
+        - gross_profit_upper
+        - gross_margin_ppm
+        - gross_margin_percent
+        - sale_amount_types
+        - document_count
+        - created_by
+        - created_at
+      properties:
+        snapshot_id:
+          type: integer
+          format: int64
+          minimum: 1
+        snapshot_no:
+          type: string
+          description: 单号 ZJS + YYYYMM + -4 位当月序号（如 ZJS202609-0003）。
+        batch_no:
+          type: string
+          description: 本次生成动作的批次号；业务员维度一次生成多张时共用同一个批次号。
+        scope:
+          $ref: '#/components/schemas/ReportScope'
+        period:
+          type: string
+        business_user:
+          $ref: '#/components/schemas/UserSummary'
+        inbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        inbound_amount_upper:
+          type: string
+        outbound_amount:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        outbound_amount_upper:
+          type: string
+        gross_profit:
+          type: string
+          pattern: '^-?\d{1,16}(\.\d{1,2})?$'
+        gross_profit_upper:
+          type: string
+        gross_margin_ppm:
+          type: integer
+          format: int64
+        gross_margin_percent:
+          type: string
+        sale_amount_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSaleAmountTotal'
+        document_count:
+          type: integer
+          format: int64
+          minimum: 0
+        remark:
+          type: string
+          maxLength: 500
+          nullable: true
+        created_by:
+          $ref: '#/components/schemas/UserSummary'
+        created_at:
+          type: string
+          format: date-time
+    ReportSnapshotPageData:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSnapshotData'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    ReportCreateSnapshotRequest:
+      type: object
+      additionalProperties: false
+      description: 生成月度总结算的请求体。scope = business_user 不带 business_user_id 时为该周期内所有有单据的业务员各生成一张。
+      required: [period, scope]
+      properties:
+        period:
+          type: string
+          description: 统计月份，形如 2026-09；缺省取服务端当前月份。
+        scope:
+          $ref: '#/components/schemas/ReportScope'
+        business_user_id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 仅 scope = business_user 时有意义；缺省表示该周期内全部业务员。
+        remark:
+          type: string
+          maxLength: 500
+          nullable: true
+    ReportCreateSnapshotData:
+      type: object
+      additionalProperties: false
+      required: [batch_no, period, snapshots]
+      properties:
+        batch_no:
+          type: string
+        period:
+          type: string
+        snapshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSnapshotData'
+    ReportOverviewApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportOverviewData'
+    ReportInboundStatsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportInboundStatsData'
+    ReportOutboundStatsApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportOutboundStatsData'
+    ReportBusinessUsersApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportBusinessUsersData'
+    ReportSnapshotApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportSnapshotData'
+    ReportSnapshotPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportSnapshotPageData'
+    ReportCreateSnapshotApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReportCreateSnapshotData'

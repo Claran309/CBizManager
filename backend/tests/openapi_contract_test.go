@@ -81,6 +81,13 @@ func TestOpenAPIContract(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/finance/invoices"},
 		{method: http.MethodPost, path: "/api/v1/finance/invoices/{record_id}/revoke"},
 		{method: http.MethodGet, path: "/api/v1/finance/statements/{document_id}"},
+		{method: http.MethodGet, path: "/api/v1/reports/overview"},
+		{method: http.MethodGet, path: "/api/v1/reports/inbound-stats"},
+		{method: http.MethodGet, path: "/api/v1/reports/outbound-stats"},
+		{method: http.MethodGet, path: "/api/v1/reports/business-users"},
+		{method: http.MethodPost, path: "/api/v1/reports/summary-settlements"},
+		{method: http.MethodGet, path: "/api/v1/reports/summary-settlements"},
+		{method: http.MethodGet, path: "/api/v1/reports/summary-settlements/{snapshot_id}"},
 		{method: http.MethodGet, path: "/health/live"},
 		{method: http.MethodGet, path: "/health/ready"},
 	}
@@ -181,6 +188,11 @@ func TestOpenAPIContract(t *testing.T) {
 		"SETTLEMENT_SOURCE_INVALID",
 		"SETTLEMENT_SOURCE_CONFLICT",
 		"SETTLEMENT_REMARK_REQUIRED",
+		"FINANCE_RECORD_NOT_FOUND",
+		"FINANCE_DOCUMENT_MISMATCH",
+		"FINANCE_AMOUNT_EXCEEDS",
+		"REPORT_SNAPSHOT_NOT_FOUND",
+		"REPORT_PERIOD_EMPTY",
 		"IDEMPOTENCY_KEY_REUSED",
 		"RESOURCE_VERSION_CONFLICT",
 		"CSRF_INVALID",
@@ -497,6 +509,182 @@ func TestOpenAPIContractFinance(t *testing.T) {
 		"document.view_others", "document.edit_others", "report.view",
 		"member.manage", "dictionary.manage", "settlement.approve", "finance.record",
 	})
+}
+
+// TestOpenAPIContractReporting 锁定汇总统计与月度总结算契约的关键约定：
+// 统计维度枚举、快照冻结语义下的必填字段、幂等键与快照 ID 路径参数，
+// 以及「汇总模块只有看全组一种数据范围」这一权限口径。
+func TestOpenAPIContractReporting(t *testing.T) {
+	contractPath := filepath.Join("..", "..", "api", "openapi", "cbizdocsmanager-v1.yaml")
+	doc, err := openapi3.NewLoader().LoadFromFile(contractPath)
+	if err != nil {
+		t.Fatalf("load OpenAPI contract %q: %v", contractPath, err)
+	}
+	if err := doc.Validate(context.Background()); err != nil {
+		t.Fatalf("validate OpenAPI contract: %v", err)
+	}
+
+	assertTopLevelEnum(t, requireSchema(t, doc, "ReportScope"), []string{"company", "business_user"})
+	// 分页响应必须齐备 items / page / page_size / total，客户端才能直接复用通用分页组件。
+	pageData := requireSchema(t, doc, "ReportSnapshotPageData")
+	for _, property := range []string{"items", "page", "page_size", "total"} {
+		if !containsString(pageData.Required, property) {
+			t.Errorf("ReportSnapshotPageData must require property %q", property)
+		}
+	}
+
+	// 看板指标必须齐全：客户端按这些字段渲染卡片，缺一个就少一块。
+	overviewData := requireSchema(t, doc, "ReportOverviewData")
+	for _, property := range []string{
+		"period",
+		"inbound_document_count", "inbound_amount", "inbound_amount_upper",
+		"outbound_document_count", "outbound_amount", "outbound_amount_upper",
+		"gross_profit", "gross_profit_upper", "gross_margin_ppm", "gross_margin_percent",
+		"paid_amount", "unpaid_amount", "unpaid_amount_upper", "unpaid_document_count",
+		"invoiced_amount", "uninvoiced_amount", "uninvoiced_amount_upper", "uninvoiced_document_count",
+		"received_amount", "unreceived_amount", "unreceived_amount_upper", "unreceived_document_count",
+		"supplier_count", "customer_count", "sale_amount_types",
+	} {
+		if !containsString(overviewData.Required, property) {
+			t.Errorf("ReportOverviewData must require property %q", property)
+		}
+	}
+
+	inboundData := requireSchema(t, doc, "ReportInboundStatsData")
+	for _, property := range []string{
+		"period", "document_count", "amount_total", "amount_total_upper",
+		"paid_amount", "unpaid_amount", "unpaid_amount_upper", "unpaid_document_count",
+		"invoiced_amount", "uninvoiced_amount", "uninvoiced_amount_upper", "uninvoiced_document_count",
+		"supplier_count", "items", "page", "page_size", "total",
+	} {
+		if !containsString(inboundData.Required, property) {
+			t.Errorf("ReportInboundStatsData must require property %q", property)
+		}
+	}
+
+	outboundData := requireSchema(t, doc, "ReportOutboundStatsData")
+	for _, property := range []string{
+		"period", "document_count", "amount_total", "amount_total_upper",
+		"received_amount", "unreceived_amount", "unreceived_amount_upper", "unreceived_document_count",
+		"customer_count", "sale_amount_types", "items", "page", "page_size", "total",
+	} {
+		if !containsString(outboundData.Required, property) {
+			t.Errorf("ReportOutboundStatsData must require property %q", property)
+		}
+	}
+
+	// 明细行只给金额与数量：付款挂在单据上，无法摊派到某一行品名，
+	// 契约不能让客户端以为明细行能算已付 / 未付。
+	itemData := requireSchema(t, doc, "ReportItem")
+	for _, property := range []string{"party_name", "product_name", "document_count", "quantity", "amount", "amount_upper"} {
+		if !containsString(itemData.Required, property) {
+			t.Errorf("ReportItem must require property %q", property)
+		}
+	}
+	for _, forbidden := range []string{"paid_amount", "unpaid_amount", "received_amount", "unreceived_amount"} {
+		if _, ok := itemData.Properties[forbidden]; ok {
+			t.Errorf("ReportItem must not declare settlement property %q", forbidden)
+		}
+	}
+
+	// 三类销售金额分项必须带占比，且类型引用统一的 SaleAmountType。
+	saleAmountTotal := requireSchema(t, doc, "ReportSaleAmountTotal")
+	for _, property := range []string{"sale_amount_type", "amount", "amount_upper", "share_ppm", "share_percent"} {
+		if !containsString(saleAmountTotal.Required, property) {
+			t.Errorf("ReportSaleAmountTotal must require property %q", property)
+		}
+	}
+	if ref := saleAmountTotal.Properties["sale_amount_type"]; ref == nil || ref.Ref != "#/components/schemas/SaleAmountType" {
+		t.Error("ReportSaleAmountTotal.sale_amount_type must reference SaleAmountType")
+	}
+
+	businessUsersData := requireSchema(t, doc, "ReportBusinessUsersData")
+	for _, property := range []string{"period", "items", "summary"} {
+		if !containsString(businessUsersData.Required, property) {
+			t.Errorf("ReportBusinessUsersData must require property %q", property)
+		}
+	}
+	for _, schemaName := range []string{"ReportBusinessUserSummary"} {
+		schema := requireSchema(t, doc, schemaName)
+		if ref := schema.Properties["business_user"]; ref == nil || ref.Ref != "#/components/schemas/UserSummary" {
+			t.Errorf("%s.business_user must reference UserSummary", schemaName)
+		}
+	}
+
+	// 快照是冻结视图：既没有 version，也不能有修改接口。
+	snapshotData := requireSchema(t, doc, "ReportSnapshotData")
+	for _, property := range []string{
+		"snapshot_id", "snapshot_no", "batch_no", "scope", "period", "business_user",
+		"inbound_amount", "inbound_amount_upper", "outbound_amount", "outbound_amount_upper",
+		"gross_profit", "gross_profit_upper", "gross_margin_ppm", "gross_margin_percent",
+		"sale_amount_types", "document_count", "created_by", "created_at",
+	} {
+		if !containsString(snapshotData.Required, property) {
+			t.Errorf("ReportSnapshotData must require property %q", property)
+		}
+	}
+	if _, ok := snapshotData.Properties["version"]; ok {
+		t.Error("ReportSnapshotData must not declare a version property: snapshots are frozen")
+	}
+	for _, property := range []string{"business_user", "created_by"} {
+		ref := snapshotData.Properties[property]
+		if ref == nil || ref.Ref != "#/components/schemas/UserSummary" {
+			t.Errorf("ReportSnapshotData.%s must reference UserSummary", property)
+		}
+	}
+
+	createRequest := requireSchema(t, doc, "ReportCreateSnapshotRequest")
+	for _, property := range []string{"period", "scope"} {
+		if !containsString(createRequest.Required, property) {
+			t.Errorf("ReportCreateSnapshotRequest must require property %q", property)
+		}
+	}
+	if ref := createRequest.Properties["scope"]; ref == nil || ref.Ref != "#/components/schemas/ReportScope" {
+		t.Error("ReportCreateSnapshotRequest.scope must reference ReportScope")
+	}
+
+	// 生成总结算是变更操作：必须有幂等键，且能表达「周期内没有可结算单据」这一分支。
+	create := doc.Paths.Find("/api/v1/reports/summary-settlements")
+	if create == nil || create.Post == nil {
+		t.Fatal("missing operation POST /api/v1/reports/summary-settlements")
+	}
+	if create.Post.Parameters.GetByInAndName("header", "Idempotency-Key") == nil {
+		t.Error("POST /api/v1/reports/summary-settlements must declare Idempotency-Key header")
+	}
+	if !operationDeclaresErrorCode(create.Post, "REPORT_PERIOD_EMPTY") {
+		t.Error("POST /api/v1/reports/summary-settlements must declare REPORT_PERIOD_EMPTY")
+	}
+	if create.Get == nil {
+		t.Error("missing operation GET /api/v1/reports/summary-settlements")
+	}
+
+	detail := doc.Paths.Find("/api/v1/reports/summary-settlements/{snapshot_id}")
+	if detail == nil || detail.Get == nil {
+		t.Fatal("missing operation GET /api/v1/reports/summary-settlements/{snapshot_id}")
+	}
+	if detail.Get.Parameters.GetByInAndName("path", "snapshot_id") == nil {
+		t.Error("GET /api/v1/reports/summary-settlements/{snapshot_id} must declare snapshot_id path parameter")
+	}
+	if !operationDeclaresErrorCode(detail.Get, "REPORT_SNAPSHOT_NOT_FOUND") {
+		t.Error("GET /api/v1/reports/summary-settlements/{snapshot_id} must declare REPORT_SNAPSHOT_NOT_FOUND")
+	}
+
+	// 汇总模块只有「看全组」一种数据范围：无 report.view 权限时直接 403，而不是返回空结果，
+	// 契约必须把这一口径写进每个查询操作的 403 分支。
+	for _, path := range []string{
+		"/api/v1/reports/overview",
+		"/api/v1/reports/inbound-stats",
+		"/api/v1/reports/outbound-stats",
+		"/api/v1/reports/business-users",
+	} {
+		pathItem := doc.Paths.Find(path)
+		if pathItem == nil || pathItem.Get == nil {
+			t.Fatalf("missing operation GET %s", path)
+		}
+		if !operationDeclaresErrorCode(pathItem.Get, "FORBIDDEN") {
+			t.Errorf("GET %s must declare FORBIDDEN", path)
+		}
+	}
 }
 
 // operationDeclaresErrorCode 检查某个操作是否在 4xx 响应的 x-error-codes 里声明了指定错误码。
