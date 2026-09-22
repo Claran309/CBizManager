@@ -76,6 +76,13 @@
   索引 LF），不是没格式化。判断自己的改动是否合规：把单文件按 LF 归一化后再跑 `gofmt -l`。
 - `git push` 依赖的环境代理不稳定，多次出现 `CONNECT tunnel failed, response 502` 或
   `schannel: server closed abruptly`；此时提交照做，推送待网络恢复后重试，不要反复空转。
+- **远端是 HTTPS（`github.com/Claran309/CBizManager.git`），凭据助手是 `helper-selector`**，
+  它需要交互式终端才能取凭据。在受限 / 后台 shell 里推送（或 `git ls-remote`）会先被代理拖到
+  超时（实测单次 24~37 分钟），最终报 `fatal: could not read Username for 'https://github.com':
+  terminal prompts disabled`。**这不是提交出错、也不需要改仓库配置**——提交在本地是安全的，
+  应在能力所及时由主人在可交互终端执行 `git push origin main`，或等代理恢复后重试。
+  另外：`helper-selector` 只出现在本地 config（`git config credential.helper`），
+  `--global` 里没有，`~/.git-credentials` 也不存在。
 - 本机沙箱会过滤 `.git/refs/remotes` 的写入：`git fetch` 会打印 `[new branch] main -> origin/main`，
   但随后 `git show-ref` 里**看不到** `refs/remotes/origin/main`，`git branch -vv` 会显示
   `[origin/main: gone]`。这是显示残留、**不代表远端丢提交**。核对是否已推送请用
