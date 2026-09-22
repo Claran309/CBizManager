@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -26,14 +27,15 @@ var (
 
 // Config 汇总服务启动所需的全部基础配置。
 type Config struct {
-	App       AppConfig       `mapstructure:"app"`
-	HTTP      HTTPConfig      `mapstructure:"http"`
-	MySQL     MySQLConfig     `mapstructure:"mysql"`
-	Redis     RedisConfig     `mapstructure:"redis"`
-	JWT       JWTConfig       `mapstructure:"jwt"`
-	CORS      CORSConfig      `mapstructure:"cors"`
-	WebAuth   WebAuthConfig   `mapstructure:"web_auth"`
-	Bootstrap BootstrapConfig `mapstructure:"bootstrap"`
+	App        AppConfig        `mapstructure:"app"`
+	HTTP       HTTPConfig       `mapstructure:"http"`
+	MySQL      MySQLConfig      `mapstructure:"mysql"`
+	Redis      RedisConfig      `mapstructure:"redis"`
+	JWT        JWTConfig        `mapstructure:"jwt"`
+	CORS       CORSConfig       `mapstructure:"cors"`
+	WebAuth    WebAuthConfig    `mapstructure:"web_auth"`
+	Bootstrap  BootstrapConfig  `mapstructure:"bootstrap"`
+	Invitation InvitationConfig `mapstructure:"invitation"`
 }
 
 type AppConfig struct {
@@ -93,6 +95,20 @@ type WebAuthConfig struct {
 type BootstrapConfig struct {
 	AdminUsername string `mapstructure:"admin_username"`
 	AdminPassword string `mapstructure:"admin_password"`
+}
+
+type InvitationConfig struct {
+	EncryptionKey string `mapstructure:"encryption_key"`
+}
+
+var ErrInvitationEncryptionKeyInvalid = errors.New("邀请码加密密钥必须显式配置为 Base64 编码的 32 字节密钥")
+
+func DecodeInvitationEncryptionKey(raw string) ([]byte, error) {
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(raw))
+	if err != nil || len(decoded) != 32 {
+		return nil, ErrInvitationEncryptionKeyInvalid
+	}
+	return decoded, nil
 }
 
 // Load 按“默认值 < YAML < .env/进程环境变量”的顺序加载配置。
@@ -180,6 +196,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("bootstrap.admin_username", "admin")
 	v.SetDefault("bootstrap.admin_password", "123456")
+	v.SetDefault("invitation.encryption_key", "")
 }
 
 func bindEnvironment(v *viper.Viper) {
@@ -222,6 +239,7 @@ func bindEnvironment(v *viper.Viper) {
 		"web_auth.csrf_cookie_name":    {"WEB_AUTH_CSRF_COOKIE_NAME"},
 		"bootstrap.admin_username":     {"BOOTSTRAP_ADMIN_USERNAME"},
 		"bootstrap.admin_password":     {"BOOTSTRAP_ADMIN_PASSWORD"},
+		"invitation.encryption_key":    {"INVITATION_ENCRYPTION_KEY"},
 	}
 	for key, envNames := range bindings {
 		args := append([]string{key}, envNames...)
@@ -252,6 +270,9 @@ func validateProductionSecurity(v *viper.Viper, cfg *Config) error {
 	password := strings.TrimSpace(cfg.Bootstrap.AdminPassword)
 	if password == "123456" || len(password) < 12 {
 		return ErrUnsafeProductionBootstrapPassword
+	}
+	if _, err := DecodeInvitationEncryptionKey(cfg.Invitation.EncryptionKey); err != nil {
+		return err
 	}
 	return nil
 }

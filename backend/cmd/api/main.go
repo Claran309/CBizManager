@@ -18,6 +18,7 @@ import (
 	"CBizDocsManager/backend/internal/dictionary"
 	"CBizDocsManager/backend/internal/identity"
 	"CBizDocsManager/backend/internal/infrastructure/cache"
+	"CBizDocsManager/backend/internal/infrastructure/cryptography"
 	"CBizDocsManager/backend/internal/infrastructure/database"
 	"CBizDocsManager/backend/internal/infrastructure/httpserver"
 	"CBizDocsManager/backend/internal/member"
@@ -87,10 +88,20 @@ func run(ctx context.Context, configPath string) error {
 		return fmt.Errorf("初始化 JWT: %w", err)
 	}
 	passwords := identity.NewPasswordManager()
+	// 邀请码明文只在「签发」和「查看」两次响应里出现，其余时间以 AES-GCM 密文落库。
+	// 密钥缺失或长度不对属于配置错误，直接拒绝启动，而不是静默降级成不加密存储。
+	invitationKey, err := config.DecodeInvitationEncryptionKey(cfg.Invitation.EncryptionKey)
+	if err != nil {
+		return fmt.Errorf("解析邀请码加密密钥: %w", err)
+	}
+	invitationCipher, err := cryptography.NewInvitationCipher(invitationKey)
+	if err != nil {
+		return fmt.Errorf("初始化邀请码加密器: %w", err)
+	}
 	identityRepo := identity.NewRepository(db)
 	identityService := identity.NewService(identityRepo, passwords, tokens, cfg.JWT.AccessTTL, cfg.JWT.RefreshTTL)
 	platformService := platform.NewService(platform.NewRepository(db), passwords)
-	organizationService := organization.NewService(organization.NewRepository(db), passwords)
+	organizationService := organization.NewService(organization.NewRepository(db), passwords, invitationCipher)
 	authorizer := authorization.NewAuthorizer(authorization.NewRepository(db))
 	memberService := member.NewService(member.NewRepository(db), authorizer)
 	dictionaryService := dictionary.NewService(dictionary.NewRepository(db), authorizer)
@@ -124,7 +135,11 @@ func run(ctx context.Context, configPath string) error {
 			Refresh: identityHandler.Refresh, Logout: identityHandler.Logout,
 			Me: identityHandler.Me, ChangePassword: identityHandler.ChangePassword,
 			CreateGroup: platformHandler.CreateGroup, CreateInvitation: organizationHandler.CreateInvitation,
-			WebLogin: webIdentityHandler.Login, WebRefresh: webIdentityHandler.Refresh, WebLogout: webIdentityHandler.Logout,
+			ListGroups: platformHandler.ListGroups, GetGroup: platformHandler.GetGroup,
+			ChangeGroupStatus: platformHandler.ChangeGroupStatus, ChangeGroupOwner: platformHandler.ChangeGroupOwner,
+			ListInvitations: organizationHandler.ListInvitations, RevealInvitation: organizationHandler.RevealInvitation,
+			RevokeInvitation: organizationHandler.RevokeInvitation,
+			WebLogin:         webIdentityHandler.Login, WebRefresh: webIdentityHandler.Refresh, WebLogout: webIdentityHandler.Logout,
 			ListMembers: memberHandler.List, ChangeMemberStatus: memberHandler.ChangeStatus,
 			GetMemberPermissions: memberHandler.GetPermissions, ReplaceMemberPermissions: memberHandler.ReplacePermissions,
 			PermissionCatalog: memberHandler.PermissionCatalog,

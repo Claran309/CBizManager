@@ -25,7 +25,14 @@ type RouteHandlers struct {
 	Me                       gin.HandlerFunc
 	ChangePassword           gin.HandlerFunc
 	CreateGroup              gin.HandlerFunc
+	ListGroups               gin.HandlerFunc
+	GetGroup                 gin.HandlerFunc
+	ChangeGroupStatus        gin.HandlerFunc
+	ChangeGroupOwner         gin.HandlerFunc
 	CreateInvitation         gin.HandlerFunc
+	ListInvitations          gin.HandlerFunc
+	RevealInvitation         gin.HandlerFunc
+	RevokeInvitation         gin.HandlerFunc
 	WebLogin                 gin.HandlerFunc
 	WebRefresh               gin.HandlerFunc
 	WebLogout                gin.HandlerFunc
@@ -76,14 +83,27 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	authenticated.PUT("/auth/password", deps.Routes.ChangePassword)
 	authenticated.POST("/auth/logout", deps.Routes.Logout)
 
+	// 平台治理：仅平台管理员可创建业务组、查看组列表与详情、启停组、交接主账号。
 	platform := authenticated.Group("/platform")
 	platform.Use(RequirePasswordChanged(), RequirePlatformAdmin())
 	platform.POST("/groups", deps.Routes.CreateGroup)
+	platform.GET("/groups", deps.Routes.ListGroups)
+	platform.GET("/groups/:group_id", deps.Routes.GetGroup)
+	platform.PATCH("/groups/:group_id/status", deps.Routes.ChangeGroupStatus)
+	platform.PUT("/groups/:group_id/owner", deps.Routes.ChangeGroupOwner)
 
+	// 租户域：组内成员管理、邀请码、字典。RequireTenantGroup 保证只有组内身份能进入。
 	tenant := authenticated.Group("")
 	tenant.Use(RequirePasswordChanged(), RequireTenantGroup())
+	// 邀请码的「签发 / 查看明文 / 撤销」属于主账号专属能力，单独再收一层 RequireGroupOwner。
+	invitations := tenant.Group("/groups/invitations")
+	invitations.Use(RequireGroupOwner())
+	invitations.POST("", deps.Routes.CreateInvitation)
+	invitations.GET("", deps.Routes.ListInvitations)
+	invitations.POST("/:invitation_id/secret", deps.Routes.RevealInvitation)
+	invitations.POST("/:invitation_id/revoke", deps.Routes.RevokeInvitation)
+
 	groups := tenant.Group("/groups")
-	groups.POST("/invitations", RequireGroupOwner(), deps.Routes.CreateInvitation)
 	groups.GET("/members", deps.Routes.ListMembers)
 	groups.PATCH("/members/:membership_id/status", deps.Routes.ChangeMemberStatus)
 	groups.GET("/members/:membership_id/permissions", deps.Routes.GetMemberPermissions)

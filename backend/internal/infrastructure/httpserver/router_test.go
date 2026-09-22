@@ -31,11 +31,16 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 	want := []string{
 		"GET /api/v1/auth/me", "GET /api/v1/groups/members", "GET /api/v1/groups/members/:membership_id/permissions",
 		"GET /api/v1/groups/permission-catalog", "GET /api/v1/dictionaries", "GET /health/live", "GET /health/ready",
+		"GET /api/v1/platform/groups", "GET /api/v1/platform/groups/:group_id",
+		"GET /api/v1/groups/invitations",
 		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
 		"POST /api/v1/auth/register", "POST /api/v1/auth/web/login", "POST /api/v1/auth/web/logout", "POST /api/v1/auth/web/refresh",
 		"POST /api/v1/groups/invitations", "POST /api/v1/platform/groups", "POST /api/v1/dictionaries",
+		"POST /api/v1/groups/invitations/:invitation_id/secret", "POST /api/v1/groups/invitations/:invitation_id/revoke",
 		"PATCH /api/v1/groups/members/:membership_id/status", "PATCH /api/v1/dictionaries/:dictionary_id/status",
+		"PATCH /api/v1/platform/groups/:group_id/status",
 		"PUT /api/v1/auth/password", "PUT /api/v1/groups/members/:membership_id/permissions", "PUT /api/v1/dictionaries/:dictionary_id",
+		"PUT /api/v1/platform/groups/:group_id/owner",
 	}
 	sort.Strings(want)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
@@ -121,6 +126,8 @@ func noOpRouteHandlers() RouteHandlers {
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
+		ListGroups: noContent, GetGroup: noContent, ChangeGroupStatus: noContent, ChangeGroupOwner: noContent,
+		ListInvitations: noContent, RevealInvitation: noContent, RevokeInvitation: noContent,
 		WebLogin: noContent, WebRefresh: noContent, WebLogout: noContent,
 		ListMembers: noContent, ChangeMemberStatus: noContent, GetMemberPermissions: noContent,
 		ReplaceMemberPermissions: noContent, PermissionCatalog: noContent,

@@ -148,6 +148,7 @@ func (s *Service) Me(ctx context.Context, principal Principal) (*MeResponse, err
 			ID: user.ID, Username: user.Username, DisplayName: user.DisplayName, AccountType: state.AccountType,
 		},
 		MustChangePassword: state.MustChangePassword,
+		PermissionCodes:    []string{},
 	}
 	if state.GroupID != nil {
 		result.Group = &GroupSummary{ID: *state.GroupID, Name: state.GroupName}
@@ -155,6 +156,17 @@ func (s *Service) Me(ctx context.Context, principal Principal) (*MeResponse, err
 	if state.MemberType != "" {
 		memberType := state.MemberType
 		result.MemberType = &memberType
+	}
+	// 只有普通成员需要逐条下发权限码；平台管理员与主账号的权限来自角色本身，
+	// 保持空数组可以让客户端用「数组是否为空」这一条规则统一判断，而不是靠角色分叉。
+	if state.AccountType == AccountTypeMember && state.GroupID != nil {
+		codes, err := s.repo.ListPermissionCodes(ctx, *state.GroupID, user.ID)
+		if err != nil {
+			return nil, internalServiceError("list current permission codes", err)
+		}
+		if codes != nil {
+			result.PermissionCodes = codes
+		}
 	}
 	return result, nil
 }

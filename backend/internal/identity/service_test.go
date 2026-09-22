@@ -218,6 +218,92 @@ func TestServiceMeReturnsUserAndGroupSummary(t *testing.T) {
 	if got.MemberType == nil || *got.MemberType != "member" {
 		t.Fatalf("Me() member_type = %v", got.MemberType)
 	}
+	// 未授予任何权限的成员也必须拿到空数组，客户端据此稳定渲染「无可用菜单」。
+	if got.PermissionCodes == nil || len(got.PermissionCodes) != 0 {
+		t.Fatalf("Me() permission_codes = %#v, want empty slice", got.PermissionCodes)
+	}
+}
+
+func TestServiceMeReturnsPermissionCodesOnlyForMembers(t *testing.T) {
+	t.Run("member gets granted codes", func(t *testing.T) {
+		repo := newFakeIdentityRepository()
+		groupID := uint64(77)
+		user := repo.addUser(User{
+			Username: "member-with-grants", PasswordHash: "hash:secret", DisplayName: "成员",
+			AccountType: AccountTypeMember, Status: UserStatusActive,
+		}, AccessState{
+			GroupID: &groupID, GroupName: "Finance", AccountType: AccountTypeMember, MemberType: "member",
+			UserStatus: UserStatusActive, GroupStatus: "active", MembershipStatus: "active",
+		})
+		repo.permissionCodes = []string{"document.inbound.write", "document.outbound.read"}
+		service, _ := newIdentityTestService(t, repo)
+
+		got, err := service.Me(context.Background(), Principal{UserID: user.ID, GroupID: &groupID, AccountType: AccountTypeMember})
+		if err != nil {
+			t.Fatalf("Me() error = %v", err)
+		}
+		if len(got.PermissionCodes) != 2 || got.PermissionCodes[0] != "document.inbound.write" {
+			t.Fatalf("Me() permission_codes = %#v", got.PermissionCodes)
+		}
+	})
+
+	t.Run("owner and platform admin skip permission lookup", func(t *testing.T) {
+		cases := []struct {
+			name        string
+			accountType AccountType
+			memberType  string
+			withGroup   bool
+		}{
+			{name: "group owner", accountType: AccountTypeGroupOwner, memberType: "owner", withGroup: true},
+			{name: "platform admin", accountType: AccountTypePlatformAdmin},
+		}
+		for _, tt := range cases {
+			t.Run(tt.name, func(t *testing.T) {
+				repo := newFakeIdentityRepository()
+				state := AccessState{AccountType: tt.accountType, MemberType: tt.memberType, UserStatus: UserStatusActive}
+				if tt.withGroup {
+					groupID := uint64(88)
+					state.GroupID = &groupID
+					state.GroupName = "Finance"
+					state.GroupStatus = "active"
+					state.MembershipStatus = "active"
+				}
+				user := repo.addUser(User{
+					Username: "role-" + string(tt.accountType), PasswordHash: "hash:secret",
+					DisplayName: "角色账号", AccountType: tt.accountType, Status: UserStatusActive,
+				}, state)
+				// 即使仓储里存在权限码记录，角色账号也不应读取权限表。
+				repo.permissionCodes = []string{"should.not.be.used"}
+				service, _ := newIdentityTestService(t, repo)
+
+				got, err := service.Me(context.Background(), Principal{UserID: user.ID, AccountType: tt.accountType})
+				if err != nil {
+					t.Fatalf("Me() error = %v", err)
+				}
+				if len(got.PermissionCodes) != 0 {
+					t.Fatalf("Me() permission_codes = %#v, want empty", got.PermissionCodes)
+				}
+			})
+		}
+	})
+
+	t.Run("repository failure surfaces as internal error", func(t *testing.T) {
+		repo := newFakeIdentityRepository()
+		groupID := uint64(99)
+		user := repo.addUser(User{
+			Username: "member-broken", PasswordHash: "hash:secret", DisplayName: "成员",
+			AccountType: AccountTypeMember, Status: UserStatusActive,
+		}, AccessState{
+			GroupID: &groupID, GroupName: "Finance", AccountType: AccountTypeMember, MemberType: "member",
+			UserStatus: UserStatusActive, GroupStatus: "active", MembershipStatus: "active",
+		})
+		repo.listCodesErr = errors.New("permission table unavailable")
+		service, _ := newIdentityTestService(t, repo)
+
+		if _, err := service.Me(context.Background(), Principal{UserID: user.ID, AccountType: AccountTypeMember}); err == nil {
+			t.Fatal("Me() error = nil, want internal error")
+		}
+	})
 }
 
 func TestServiceBootstrapsPlatformAdminWithHashedForcedChangePassword(t *testing.T) {
@@ -271,6 +357,9 @@ type fakeIdentityRepository struct {
 	states             map[uint64]AccessState
 	sessions           map[string]RefreshSession
 	lastCreatedSession *RefreshSession
+	// permissionCodes 是 ListPermissionCodes 的桩返回值；listCodesErr 用于模拟查询失败。
+	permissionCodes []string
+	listCodesErr    error
 }
 
 func newFakeIdentityRepository() *fakeIdentityRepository {
@@ -279,6 +368,20 @@ func newFakeIdentityRepository() *fakeIdentityRepository {
 		users: make(map[uint64]User), usernames: make(map[string]uint64),
 		states: make(map[uint64]AccessState), sessions: make(map[string]RefreshSession),
 	}
+}
+
+// ListPermissionCodes 返回用例预置的权限码；listCodesErr 非空时模拟仓储查询失败。
+// 未预置权限码时返回空切片而非 nil，与真实仓储「无权限即空数组」的语义对齐。
+func (r *fakeIdentityRepository) ListPermissionCodes(_ context.Context, _, _ uint64) ([]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.listCodesErr != nil {
+		return nil, r.listCodesErr
+	}
+	if r.permissionCodes == nil {
+		return []string{}, nil
+	}
+	return append([]string{}, r.permissionCodes...), nil
 }
 
 func (r *fakeIdentityRepository) addUser(user User, state AccessState) User {

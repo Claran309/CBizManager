@@ -47,3 +47,6 @@ web_auth:
   cookie_domain: ""
   refresh_cookie_name: cbiz_refresh
   csrf_cookie_name: cbiz_csrf
+
+invitation:
+  encryption_key: ""

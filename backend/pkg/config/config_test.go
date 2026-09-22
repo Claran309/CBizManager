@@ -351,6 +351,7 @@ func TestLoadAcceptsExplicitProductionSecurityConfig(t *testing.T) {
 	t.Setenv("JWT_SECRET", strongProductionJWTSecret)
 	t.Setenv("BOOTSTRAP_ADMIN_USERNAME", "prod-admin")
 	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "strong-password")
+	t.Setenv("INVITATION_ENCRYPTION_KEY", "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=")
 
 	cfg, err := config.Load(path)
 	if err != nil {

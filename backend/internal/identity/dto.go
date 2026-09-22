@@ -40,4 +40,8 @@ type MeResponse struct {
 	Group              *GroupSummary `json:"group"`
 	MemberType         *string       `json:"member_type"`
 	MustChangePassword bool          `json:"must_change_password"`
+	// PermissionCodes 是当前成员在本组内被显式授予的权限码（成员账号）。
+	// 平台管理员与主账号返回空数组：它们的权限来自角色本身，不需要逐条授权。
+	// 客户端只用它做菜单/按钮级渲染，真正的鉴权仍在服务端逐请求校验。
+	PermissionCodes []string `json:"permission_codes"`
 }

@@ -168,6 +168,18 @@ type fakeOrganizationRepository struct {
 	consumeErr   error
 	singleUse    bool
 	used         bool
+
+	// 邀请码生命周期（列表 / 查看 / 撤销）的桩数据与调用记录。
+	listGroupID  uint64
+	listQuery    InvitationQuery
+	listItems    []InvitationSummaryData
+	listTotal    int64
+	listErr      error
+	revealable   *Invitation
+	revealErr    error
+	revokeInput  RevokeInvitationInput
+	revokeResult *Invitation
+	revokeErr    error
 }
 
 func newFakeOrganizationRepository() *fakeOrganizationRepository {
@@ -197,6 +209,45 @@ func (r *fakeOrganizationRepository) ConsumeInvitation(_ context.Context, input 
 		Group:      Group{ID: 22, Name: "Finance", Status: GroupStatusActive},
 		Membership: Membership{ID: 32, GroupID: 22, UserID: 12, MemberType: MemberTypeMember, Status: MembershipStatusActive},
 	}, nil
+}
+
+// ListInvitations 返回预先配置的列表桩数据，同时记录查询参数供断言使用。
+func (r *fakeOrganizationRepository) ListInvitations(_ context.Context, groupID uint64, query InvitationQuery, _ time.Time) ([]InvitationSummaryData, int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listGroupID = groupID
+	r.listQuery = query
+	if r.listErr != nil {
+		return nil, 0, r.listErr
+	}
+	return r.listItems, r.listTotal, nil
+}
+
+// GetRevealableInvitation 模拟「仅同组 active 且未过期的邀请码可查看」的仓储行为。
+func (r *fakeOrganizationRepository) GetRevealableInvitation(_ context.Context, groupID, invitationID uint64, _ time.Time) (*Invitation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.revealErr != nil {
+		return nil, r.revealErr
+	}
+	if r.revealable == nil {
+		return nil, ErrInvitationInvalid
+	}
+	return r.revealable, nil
+}
+
+// RevokeInvitation 模拟撤销事务，返回撤销后的邀请码快照。
+func (r *fakeOrganizationRepository) RevokeInvitation(_ context.Context, input RevokeInvitationInput) (*Invitation, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revokeInput = input
+	if r.revokeErr != nil {
+		return nil, r.revokeErr
+	}
+	if r.revokeResult == nil {
+		return nil, ErrInvitationInvalid
+	}
+	return r.revokeResult, nil
 }
 
 func organizationSHA256(value string) string {

@@ -16,6 +16,14 @@ const (
 	CodeInvitationExpired            = "INVITATION_EXPIRED"
 	CodeInvitationUsed               = "INVITATION_USED"
 	CodeGroupNameExists              = "GROUP_NAME_EXISTS"
+	CodeGroupNotFound                = "GROUP_NOT_FOUND"
+	CodeGroupStatusInvalid           = "GROUP_STATUS_INVALID"
+	CodeOwnerTargetInvalid           = "OWNER_TARGET_INVALID"
+	CodeOwnerTargetForbidden         = "OWNER_TARGET_FORBIDDEN"
+	CodeInvitationNotFound           = "INVITATION_NOT_FOUND"
+	CodeInvitationNotRevealable      = "INVITATION_NOT_REVEALABLE"
+	CodeInvitationNotRevokable       = "INVITATION_NOT_REVOKABLE"
+	CodeInvitationDecryptFailed      = "INVITATION_DECRYPT_FAILED"
 	CodeMemberNotFound               = "MEMBER_NOT_FOUND"
 	CodeMemberOwnerProtected         = "MEMBER_OWNER_PROTECTED"
 	CodeMemberSelfOperationForbidden = "MEMBER_SELF_OPERATION_FORBIDDEN"
@@ -105,7 +113,15 @@ var (
 	ErrInvitationExpired = New(CodeInvitationExpired, "邀请码已过期", http.StatusBadRequest)
 	ErrInvitationUsed    = New(CodeInvitationUsed, "邀请码已使用", http.StatusBadRequest)
 
-	ErrGroupNameExists = New(CodeGroupNameExists, "组名已存在", http.StatusConflict)
+	ErrGroupNameExists         = New(CodeGroupNameExists, "组名已存在", http.StatusConflict)
+	ErrGroupNotFound           = New(CodeGroupNotFound, "组不存在", http.StatusNotFound)
+	ErrGroupStatusInvalid      = New(CodeGroupStatusInvalid, "组状态不允许执行此操作", http.StatusConflict)
+	ErrOwnerTargetInvalid      = New(CodeOwnerTargetInvalid, "新主账号目标无效", http.StatusBadRequest)
+	ErrOwnerTargetForbidden    = New(CodeOwnerTargetForbidden, "新主账号目标不允许交接", http.StatusConflict)
+	ErrInvitationNotFound      = New(CodeInvitationNotFound, "邀请码不存在", http.StatusNotFound)
+	ErrInvitationNotRevealable = New(CodeInvitationNotRevealable, "邀请码当前不可查看", http.StatusConflict)
+	ErrInvitationNotRevokable  = New(CodeInvitationNotRevokable, "邀请码当前不可撤销", http.StatusConflict)
+	ErrInvitationDecryptFailed = New(CodeInvitationDecryptFailed, "邀请码暂时无法查看", http.StatusInternalServerError)
 
 	ErrMemberNotFound        = New(CodeMemberNotFound, "成员不存在", http.StatusNotFound)
 	ErrMemberOwnerProtected  = New(CodeMemberOwnerProtected, "不能通过成员接口操作主账号", http.StatusForbidden)

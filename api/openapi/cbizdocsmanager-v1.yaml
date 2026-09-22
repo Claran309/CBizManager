@@ -289,6 +289,258 @@ paths:
                 $ref: '#/components/schemas/ErrorApiResponse'
         '500':
           $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Platform]
+      operationId: listGroups
+      summary: 平台管理员分页查询业务组
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/GroupStatus'
+        - name: keyword
+          in: query
+          required: false
+          description: 按组名模糊匹配
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupPageApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无平台管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/platform/groups/{group_id}:
+    get:
+      tags: [Platform]
+      operationId: getGroupDetail
+      summary: 平台管理员查询组治理详情
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      responses:
+        '200':
+          description: 查询成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无平台管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 组不存在（GROUP_NOT_FOUND）
+          x-error-codes: [GROUP_NOT_FOUND]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/platform/groups/{group_id}/status:
+    patch:
+      tags: [Platform]
+      operationId: changeGroupStatus
+      summary: 平台管理员停用或启用业务组
+      description: 目标状态与当前状态一致时按幂等成功处理；停用组会连同撤销该组全部刷新会话。
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeGroupStatusRequest'
+      responses:
+        '200':
+          description: 变更成功，返回组最新摘要
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupSummaryApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无平台管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 组不存在（GROUP_NOT_FOUND）
+          x-error-codes: [GROUP_NOT_FOUND]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 组已被其他请求修改（RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [RESOURCE_VERSION_CONFLICT]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/platform/groups/{group_id}/owner:
+    put:
+      tags: [Platform]
+      operationId: changeGroupOwner
+      summary: 平台管理员交接组主账号
+      description: 支持把现有成员提升为主账号（existing_member）或新建账号并设为主账号（new_account）。
+      parameters:
+        - $ref: '#/components/parameters/GroupIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeGroupOwnerRequest'
+      responses:
+        '200':
+          description: 交接成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnerChangedApiResponse'
+        '400':
+          description: 请求参数错误或交接目标无效（VALIDATION_FAILED、OWNER_TARGET_INVALID）
+          x-error-codes: [VALIDATION_FAILED, OWNER_TARGET_INVALID]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无平台管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 组不存在（GROUP_NOT_FOUND）
+          x-error-codes: [GROUP_NOT_FOUND]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 组已被其他请求修改或用户名已存在（RESOURCE_VERSION_CONFLICT、USER_USERNAME_EXISTS）
+          x-error-codes: [RESOURCE_VERSION_CONFLICT, USER_USERNAME_EXISTS]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/groups/invitations:
     post:
       tags: [Group]
@@ -325,6 +577,196 @@ paths:
         '403':
           description: 无组管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
           x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Group]
+      operationId: listInvitations
+      summary: 组主账号分页查询邀请码列表
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/InvitationDisplayStatus'
+      responses:
+        '200':
+          description: 查询成功；列表永不返回邀请码明文与密文
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationPageApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无组管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/groups/invitations/{invitation_id}/secret:
+    post:
+      tags: [Group]
+      operationId: revealInvitation
+      summary: 组主账号查看仍有效的邀请码明文
+      description: 仅 active 且未过期的邀请码可查看；响应带 no-store，客户端展示后必须立即清除本地副本。
+      parameters:
+        - $ref: '#/components/parameters/InvitationIdPath'
+      responses:
+        '200':
+          description: 查看成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+            Cache-Control:
+              description: 固定为 no-store，禁止代理与浏览器缓存明文邀请码
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationSecretApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无组管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 邀请码已使用、已撤销或已过期，不再可查看（INVITATION_NOT_REVEALABLE）
+          x-error-codes: [INVITATION_NOT_REVEALABLE]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '500':
+          description: 密钥缺失或密文校验失败（INTERNAL_ERROR、INVITATION_DECRYPT_FAILED）
+          x-error-codes: [INTERNAL_ERROR, INVITATION_DECRYPT_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+  /api/v1/groups/invitations/{invitation_id}/revoke:
+    post:
+      tags: [Group]
+      operationId: revokeInvitation
+      summary: 组主账号撤销仍有效的邀请码
+      parameters:
+        - $ref: '#/components/parameters/InvitationIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokeInvitationRequest'
+      responses:
+        '200':
+          description: 撤销成功
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationSummaryApiResponse'
+        '400':
+          description: 请求参数错误（VALIDATION_FAILED）
+          x-error-codes: [VALIDATION_FAILED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '401':
+          $ref: '#/components/responses/TokenExpired'
+        '403':
+          description: 无组管理权限或必须先修改初始密码（FORBIDDEN、AUTH_PASSWORD_CHANGE_REQUIRED）
+          x-error-codes: [FORBIDDEN, AUTH_PASSWORD_CHANGE_REQUIRED]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '404':
+          description: 邀请码不存在（INVITATION_NOT_FOUND）
+          x-error-codes: [INVITATION_NOT_FOUND]
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorApiResponse'
+        '409':
+          description: 邀请码不可撤销或已被其他请求修改（INVITATION_NOT_REVOKABLE、RESOURCE_VERSION_CONFLICT）
+          x-error-codes: [INVITATION_NOT_REVOKABLE, RESOURCE_VERSION_CONFLICT]
           headers:
             X-Request-ID:
               $ref: '#/components/headers/RequestID'
@@ -888,6 +1330,22 @@ components:
       schema:
         type: string
   parameters:
+    GroupIdPath:
+      name: group_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    InvitationIdPath:
+      name: invitation_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
     MembershipIDPath:
       name: membership_id
       in: path
@@ -967,7 +1425,13 @@ components:
         - INVITATION_INVALID
         - INVITATION_EXPIRED
         - INVITATION_USED
+        - INVITATION_NOT_FOUND
+        - INVITATION_NOT_REVEALABLE
+        - INVITATION_NOT_REVOKABLE
+        - INVITATION_DECRYPT_FAILED
         - GROUP_NAME_EXISTS
+        - GROUP_NOT_FOUND
+        - OWNER_TARGET_INVALID
         - MEMBER_NOT_FOUND
         - MEMBER_OWNER_PROTECTED
         - MEMBER_SELF_OPERATION_FORBIDDEN
@@ -1183,7 +1647,7 @@ components:
     MeData:
       type: object
       additionalProperties: false
-      required: [user, group, member_type, must_change_password]
+      required: [user, group, member_type, must_change_password, permission_codes]
       properties:
         user:
           $ref: '#/components/schemas/UserSummary'
@@ -1197,6 +1661,11 @@ components:
           nullable: true
         must_change_password:
           type: boolean
+        permission_codes:
+          type: array
+          description: 当前身份在所属组内的权限码；平台管理员与主账号固定为空数组。
+          items:
+            $ref: '#/components/schemas/PermissionCode'
     MeApiResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponse'
@@ -1258,6 +1727,266 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/InvitationCreatedData'
+    GroupStatus:
+      type: string
+      enum: [active, disabled]
+    GroupSummaryData:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, owner, member_count, version, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/GroupStatus'
+        owner:
+          $ref: '#/components/schemas/UserSummary'
+        member_count:
+          type: integer
+          format: int64
+          minimum: 0
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    GroupPageData:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupSummaryData'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    GroupPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/GroupPageData'
+    GroupSummaryApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/GroupSummaryData'
+    OwnerCandidateData:
+      type: object
+      additionalProperties: false
+      required: [membership_id, user]
+      properties:
+        membership_id:
+          type: integer
+          format: int64
+          minimum: 1
+        user:
+          $ref: '#/components/schemas/UserSummary'
+    GroupDetailData:
+      type: object
+      additionalProperties: false
+      required: [group, member_counts, owner_candidates]
+      properties:
+        group:
+          $ref: '#/components/schemas/GroupSummaryData'
+        member_counts:
+          type: object
+          description: 按成员状态聚合的人数，键为 active / disabled / removed。
+          additionalProperties:
+            type: integer
+            format: int64
+            minimum: 0
+        owner_candidates:
+          type: array
+          description: 可作为新主账号的现有成员（仅 active 成员）。
+          items:
+            $ref: '#/components/schemas/OwnerCandidateData'
+    GroupDetailApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/GroupDetailData'
+    ChangeGroupStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, version]
+      properties:
+        status:
+          $ref: '#/components/schemas/GroupStatus'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 客户端持有的组版本号，用于乐观锁校验。
+    ChangeGroupOwnerRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, version]
+      properties:
+        mode:
+          type: string
+          enum: [existing_member, new_account]
+        membership_id:
+          type: integer
+          format: int64
+          minimum: 1
+          nullable: true
+          description: mode=existing_member 时必填，指向候选成员的关系 ID。
+        username:
+          type: string
+          nullable: true
+          description: mode=new_account 时必填。
+        display_name:
+          type: string
+          nullable: true
+          description: mode=new_account 时必填。
+        temporary_password:
+          type: string
+          format: password
+          nullable: true
+          minLength: 8
+          description: mode=new_account 时必填，长度不少于 8。
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    OwnerChangedData:
+      type: object
+      additionalProperties: false
+      required: [group, owner]
+      properties:
+        group:
+          $ref: '#/components/schemas/GroupSummaryData'
+        owner:
+          $ref: '#/components/schemas/UserSummary'
+    OwnerChangedApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/OwnerChangedData'
+    InvitationDisplayStatus:
+      type: string
+      description: 展示状态；active 过期后按 expired 投影，不改变库中状态。
+      enum: [active, expired, used, revoked]
+    InvitationSummaryData:
+      type: object
+      additionalProperties: false
+      required: [invitation_id, status, expires_at, created_at, version]
+      properties:
+        invitation_id:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/InvitationDisplayStatus'
+        expires_at:
+          type: string
+          format: date-time
+        used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+    InvitationSummaryApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/InvitationSummaryData'
+    InvitationPageData:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvitationSummaryData'
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+    InvitationPageApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/InvitationPageData'
+    InvitationSecretData:
+      type: object
+      additionalProperties: false
+      required: [invitation_id, invitation_code, expires_at]
+      properties:
+        invitation_id:
+          type: integer
+          format: int64
+          minimum: 1
+        invitation_code:
+          type: string
+          description: 邀请码明文；响应固定带 no-store，客户端用完必须立即清除。
+        expires_at:
+          type: string
+          format: date-time
+    InvitationSecretApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/InvitationSecretData'
+    RevokeInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [version]
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 客户端持有的邀请码版本号，用于乐观锁校验。
     WebAccessTokenData:
       type: object
       additionalProperties: false

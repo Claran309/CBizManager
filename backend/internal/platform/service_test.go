@@ -90,6 +90,19 @@ type fakePlatformRepository struct {
 	input    CreateGroupInput
 	creation GroupCreation
 	err      error
+
+	// 平台治理（组列表 / 详情 / 启停 / 主账号交接）的桩数据与调用记录。
+	groups       []GroupSummaryData
+	groupTotal   int64
+	listQuery    GroupQuery
+	detail       *GroupDetailData
+	detailErr    error
+	statusInput  ChangeGroupStatusInput
+	statusResult *GroupSummaryData
+	statusErr    error
+	ownerInput   ChangeOwnerInput
+	ownerChange  *OwnerChange
+	ownerErr     error
 }
 
 func (r *fakePlatformRepository) CreateGroupWithOwner(_ context.Context, input CreateGroupInput) (*GroupCreation, error) {
@@ -102,10 +115,57 @@ func (r *fakePlatformRepository) CreateGroupWithOwner(_ context.Context, input C
 			ID: 11, Username: input.OwnerUsername, PasswordHash: input.OwnerPasswordHash, DisplayName: input.OwnerDisplayName,
 			AccountType: identity.AccountTypeGroupOwner, Status: identity.UserStatusActive, MustChangePassword: true,
 		},
-		Group:      organization.Group{ID: 21, Name: input.GroupName, Status: organization.GroupStatusActive, OwnerUserID: 11, CreatedBy: input.OperatorUserID},
+		Group:      organization.Group{ID: 21, Name: input.GroupName, Status: organization.GroupStatusActive, OwnerUserID: 11, CreatedBy: input.OperatorUserID, Version: 1},
 		Membership: organization.Membership{ID: 31, GroupID: 21, UserID: 11, MemberType: organization.MemberTypeOwner, Status: organization.MembershipStatusActive},
 	}
 	return &r.creation, nil
+}
+
+// ListGroups 返回预先配置的组分页桩数据，同时记录查询参数供断言使用。
+func (r *fakePlatformRepository) ListGroups(_ context.Context, query GroupQuery) ([]GroupSummaryData, int64, error) {
+	r.listQuery = query
+	if r.err != nil {
+		return nil, 0, r.err
+	}
+	return r.groups, r.groupTotal, nil
+}
+
+// GetGroupDetail 返回预先配置的组详情；未配置时按「组不存在」处理。
+func (r *fakePlatformRepository) GetGroupDetail(_ context.Context, _ uint64) (*GroupDetailData, error) {
+	if r.detailErr != nil {
+		return nil, r.detailErr
+	}
+	if r.err != nil {
+		return nil, r.err
+	}
+	if r.detail == nil {
+		return nil, ErrGroupMissing
+	}
+	return r.detail, nil
+}
+
+// ChangeGroupStatus 记录输入并返回配置的启停结果。
+func (r *fakePlatformRepository) ChangeGroupStatus(_ context.Context, input ChangeGroupStatusInput) (*GroupSummaryData, error) {
+	r.statusInput = input
+	if r.statusErr != nil {
+		return nil, r.statusErr
+	}
+	if r.statusResult == nil {
+		return nil, ErrGroupMissing
+	}
+	return r.statusResult, nil
+}
+
+// ChangeOwner 记录输入并返回配置的交接结果。
+func (r *fakePlatformRepository) ChangeOwner(_ context.Context, input ChangeOwnerInput) (*OwnerChange, error) {
+	r.ownerInput = input
+	if r.ownerErr != nil {
+		return nil, r.ownerErr
+	}
+	if r.ownerChange == nil {
+		return nil, ErrOwnerTargetInvalid
+	}
+	return r.ownerChange, nil
 }
 
 func assertPlatformAppError(t *testing.T, err error, code string) {

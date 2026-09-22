@@ -32,6 +32,7 @@ type Repository interface {
 	RevokeRefreshToken(ctx context.Context, tokenHash string, now time.Time) error
 	ChangePassword(ctx context.Context, userID uint64, expectedOldHash, newHash string, now time.Time) error
 	BootstrapPlatformAdmin(ctx context.Context, admin *User, now time.Time) (bool, error)
+	ListPermissionCodes(ctx context.Context, groupID, userID uint64) ([]string, error)
 }
 
 type gormRepository struct {
@@ -287,6 +288,23 @@ func (r *gormRepository) bootstrapPlatformAdminTransaction(ctx context.Context, 
 		*created = true
 		return nil
 	})
+}
+
+// ListPermissionCodes 查询成员在指定组内被显式授予的权限码，按字典序返回，保证同一份数据每次下发顺序稳定。
+// 只在「成员账号 + 有效成员关系 + 有效组」的前提下返回；平台管理员与主账号不依赖该表，
+// 因此上层对这两类角色直接返回空数组，不会调用本方法。
+func (r *gormRepository) ListPermissionCodes(ctx context.Context, groupID, userID uint64) ([]string, error) {
+	codes := make([]string, 0)
+	err := r.db.WithContext(ctx).
+		Table("membership_permissions AS permission").
+		Joins("JOIN memberships AS membership ON membership.id = permission.membership_id AND membership.group_id = permission.group_id").
+		Where("membership.user_id = ? AND membership.group_id = ? AND membership.status = ?", userID, groupID, "active").
+		Order("permission.permission_code ASC").
+		Pluck("permission.permission_code", &codes).Error
+	if err != nil {
+		return nil, fmt.Errorf("list membership permission codes: %w", err)
+	}
+	return codes, nil
 }
 
 func isMySQLDeadlock(err error) bool {
