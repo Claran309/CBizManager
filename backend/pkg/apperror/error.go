@@ -40,6 +40,9 @@ const (
 	CodeSettlementSourceInvalid      = "SETTLEMENT_SOURCE_INVALID"
 	CodeSettlementSourceConflict     = "SETTLEMENT_SOURCE_CONFLICT"
 	CodeSettlementRemarkRequired     = "SETTLEMENT_REMARK_REQUIRED"
+	CodeFinanceRecordNotFound        = "FINANCE_RECORD_NOT_FOUND"
+	CodeFinanceDocumentMismatch      = "FINANCE_DOCUMENT_MISMATCH"
+	CodeFinanceAmountExceeds         = "FINANCE_AMOUNT_EXCEEDS"
 	CodeResourceVersionConflict      = "RESOURCE_VERSION_CONFLICT"
 	CodeCSRFInvalid                  = "CSRF_INVALID"
 	CodeOriginForbidden              = "ORIGIN_FORBIDDEN"
@@ -151,6 +154,10 @@ var (
 	ErrSettlementSourceInvalid  = New(CodeSettlementSourceInvalid, "源单据不允许参与结算", http.StatusBadRequest)
 	ErrSettlementSourceConflict = New(CodeSettlementSourceConflict, "源单据已被其他有效结算单引用", http.StatusConflict)
 	ErrSettlementRemarkRequired = New(CodeSettlementRemarkRequired, "驳回结算单必须填写原因", http.StatusBadRequest)
+
+	ErrFinanceRecordNotFound   = New(CodeFinanceRecordNotFound, "付款 / 收款 / 开票记录不存在", http.StatusNotFound)
+	ErrFinanceDocumentMismatch = New(CodeFinanceDocumentMismatch, "记录类型与单据类型不匹配", http.StatusBadRequest)
+	ErrFinanceAmountExceeds    = New(CodeFinanceAmountExceeds, "累计金额超过单据总额", http.StatusConflict)
 
 	ErrResourceVersionConflict = New(CodeResourceVersionConflict, "资源已被其他请求修改", http.StatusConflict)
 

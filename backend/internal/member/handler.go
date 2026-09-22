@@ -138,6 +138,7 @@ func permissionCatalogItem(code authorization.Code) PermissionCatalogItem {
 		authorization.PermissionMemberManage:       {Code: code, Name: "成员管理", Description: "查看成员并管理普通成员状态"},
 		authorization.PermissionDictionaryManage:   {Code: code, Name: "字典管理", Description: "新增、修改和停用辅助字典"},
 		authorization.PermissionSettlementApprove:  {Code: code, Name: "结算审批", Description: "审批结算申请"},
+		authorization.PermissionFinanceRecord:      {Code: code, Name: "财务记账", Description: "登记和撤销付款、收款与开票记录"},
 	}
 	return items[code]
 }

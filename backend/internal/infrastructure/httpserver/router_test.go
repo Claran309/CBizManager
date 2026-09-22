@@ -38,6 +38,11 @@ func TestRoutesRegistersOpenAPIEndpoints(t *testing.T) {
 		"GET /api/v1/outbound-documents", "GET /api/v1/outbound-documents/:document_id",
 		"GET /api/v1/outbound-documents/monthly-summary",
 		"GET /api/v1/settlements", "GET /api/v1/settlements/:settlement_id",
+		"GET /api/v1/finance/payments", "GET /api/v1/finance/receipts", "GET /api/v1/finance/invoices",
+		"GET /api/v1/finance/statements/:document_id",
+		"POST /api/v1/finance/payments", "POST /api/v1/finance/payments/:record_id/revoke",
+		"POST /api/v1/finance/receipts", "POST /api/v1/finance/receipts/:record_id/revoke",
+		"POST /api/v1/finance/invoices", "POST /api/v1/finance/invoices/:record_id/revoke",
 		"POST /api/v1/auth/login", "POST /api/v1/auth/logout", "POST /api/v1/auth/refresh",
 		"POST /api/v1/auth/register", "POST /api/v1/auth/web/login", "POST /api/v1/auth/web/logout", "POST /api/v1/auth/web/refresh",
 		"POST /api/v1/groups/invitations", "POST /api/v1/platform/groups", "POST /api/v1/dictionaries",
@@ -142,6 +147,7 @@ func noOpRouteHandlers() RouteHandlers {
 	settlementRoutes := SettlementRouteSet{
 		Create: noContent, List: noContent, Get: noContent, Approve: noContent, Reject: noContent,
 	}
+	financeRoutes := FinanceRouteSet{Create: noContent, List: noContent, Revoke: noContent}
 	return RouteHandlers{
 		Login: noContent, Register: noContent, Refresh: noContent, Logout: noContent,
 		Me: noContent, ChangePassword: noContent, CreateGroup: noContent, CreateInvitation: noContent,
@@ -153,5 +159,7 @@ func noOpRouteHandlers() RouteHandlers {
 		ListDictionaries: noContent, CreateDictionary: noContent, UpdateDictionary: noContent, ChangeDictionaryStatus: noContent,
 		InboundDocuments: documentRoutes, OutboundDocuments: documentRoutes,
 		Settlements: settlementRoutes,
+		Payments:    financeRoutes, Receipts: financeRoutes, Invoices: financeRoutes,
+		FinanceStatement: noContent,
 	}
 }

@@ -125,7 +125,13 @@ func TestHandlerRequiresPrincipalAndReturnsCatalog(t *testing.T) {
 	if err := json.Unmarshal(writer.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("decode catalog: %v", err)
 	}
-	if len(envelope.Data.Items) != 6 || envelope.Data.Items[0].Name == "" || envelope.Data.Items[0].Description == "" {
+	if len(envelope.Data.Items) != 7 || envelope.Data.Items[0].Name == "" || envelope.Data.Items[0].Description == "" {
+		// 每一项都必须有中文文案：漏配一条会让前端权限勾选框显示空白。
+		for _, item := range envelope.Data.Items {
+			if item.Name == "" || item.Description == "" {
+				t.Fatalf("permission %q missing label: %+v", item.Code, item)
+			}
+		}
 		t.Fatalf("catalog=%+v", envelope.Data.Items)
 	}
 }

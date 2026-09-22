@@ -18,6 +18,10 @@ const (
 	PermissionMemberManage       Code = "member.manage"
 	PermissionDictionaryManage   Code = "dictionary.manage"
 	PermissionSettlementApprove  Code = "settlement.approve"
+	// PermissionFinanceRecord 允许登记与撤销付款 / 收款 / 开票记录。
+	// 「登记」与「撤销」共用同一个权限码：只给登记权限会导致录错后无法纠正，
+	// 反而逼着人去找有全权限的账号代劳，审计上更糟。
+	PermissionFinanceRecord Code = "finance.record"
 )
 
 var catalog = [...]Code{
@@ -27,6 +31,7 @@ var catalog = [...]Code{
 	PermissionMemberManage,
 	PermissionDictionaryManage,
 	PermissionSettlementApprove,
+	PermissionFinanceRecord,
 }
 
 // Catalog 返回独立切片，防止调用方修改后端保存的权限注册表。

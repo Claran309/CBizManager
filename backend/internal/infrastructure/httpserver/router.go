@@ -48,6 +48,12 @@ type RouteHandlers struct {
 	InboundDocuments         DocumentRouteSet
 	OutboundDocuments        DocumentRouteSet
 	Settlements              SettlementRouteSet
+	Payments                 FinanceRouteSet
+	Receipts                 FinanceRouteSet
+	Invoices                 FinanceRouteSet
+	// FinanceStatement 读取单张单据的结清视图。结清视图要同时汇总付款、收款、开票三类记录，
+	// 不隶属于任何单一记录类型，因此单独注册一次即可（挂三份拷贝没有意义）。
+	FinanceStatement gin.HandlerFunc
 }
 
 // DocumentRouteSet 是一类业务单据（入库 / 出库）的全部路由处理函数。
@@ -69,6 +75,16 @@ type SettlementRouteSet struct {
 	Get     gin.HandlerFunc
 	Approve gin.HandlerFunc
 	Reject  gin.HandlerFunc
+}
+
+// FinanceRouteSet 是一类财务记录（付款 / 收款 / 开票）的全部路由处理函数。
+//
+// 三类记录的子路由结构完全一致，差异只在前缀与构造 Handler 时注入的 kind；
+// 由于 kind 在服务端构造时就固定了，客户端无法用付款接口写入收款数据。
+type FinanceRouteSet struct {
+	Create gin.HandlerFunc
+	List   gin.HandlerFunc
+	Revoke gin.HandlerFunc
 }
 
 type RouterDependencies struct {
@@ -151,6 +167,15 @@ func NewRouter(deps RouterDependencies) *gin.Engine {
 	settlements.GET("/:settlement_id", deps.Routes.Settlements.Get)
 	settlements.POST("/:settlement_id/approve", deps.Routes.Settlements.Approve)
 	settlements.POST("/:settlement_id/reject", deps.Routes.Settlements.Reject)
+
+	// 财务记录：付款（挂入库单）、收款（挂出库单）、开票（挂入库单）共用同一套子路由结构。
+	// 数据范围（本人单据 / 全组单据）与记账资格（finance.record 权限）由服务层收敛。
+	registerFinanceRoutes(tenant, "/finance/payments", deps.Routes.Payments)
+	registerFinanceRoutes(tenant, "/finance/receipts", deps.Routes.Receipts)
+	registerFinanceRoutes(tenant, "/finance/invoices", deps.Routes.Invoices)
+
+	// 单据结清视图：一次返回该单据的已付 / 未付、已收 / 未收、已开票 / 开票状态与全部记录明细。
+	tenant.GET("/finance/statements/:document_id", deps.Routes.FinanceStatement)
 	return router
 }
 
@@ -163,6 +188,17 @@ func registerDocumentRoutes(group *gin.RouterGroup, prefix string, routes Docume
 	documents.PUT("/:document_id", routes.Update)
 	documents.POST("/:document_id/submit", routes.Submit)
 	documents.POST("/:document_id/void", routes.Void)
+}
+
+// registerFinanceRoutes 注册一类财务记录（付款 / 收款 / 开票）的三条子路由。
+//
+// 没有「修改」路由是有意的：金额记错时应撤销后重新登记，保留完整的操作痕迹，
+// 也避免出现「改了金额但没改审计摘要」这类历史不一致。
+func registerFinanceRoutes(group *gin.RouterGroup, prefix string, routes FinanceRouteSet) {
+	records := group.Group(prefix)
+	records.POST("", routes.Create)
+	records.GET("", routes.List)
+	records.POST("/:record_id/revoke", routes.Revoke)
 }
 
 func liveness(c *gin.Context) {

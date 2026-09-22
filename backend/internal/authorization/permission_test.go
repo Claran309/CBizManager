@@ -34,6 +34,7 @@ func TestCatalogContainsStablePermissionCodes(t *testing.T) {
 		PermissionMemberManage,
 		PermissionDictionaryManage,
 		PermissionSettlementApprove,
+		PermissionFinanceRecord,
 	}
 	got := Catalog()
 	if len(got) != len(want) {

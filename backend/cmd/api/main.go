@@ -17,6 +17,7 @@ import (
 	"CBizDocsManager/backend/internal/authorization"
 	"CBizDocsManager/backend/internal/dictionary"
 	"CBizDocsManager/backend/internal/document"
+	"CBizDocsManager/backend/internal/finance"
 	"CBizDocsManager/backend/internal/identity"
 	"CBizDocsManager/backend/internal/infrastructure/cache"
 	"CBizDocsManager/backend/internal/infrastructure/cryptography"
@@ -109,6 +110,7 @@ func run(ctx context.Context, configPath string) error {
 	dictionaryService := dictionary.NewService(dictionary.NewRepository(db), authorizer)
 	documentService := document.NewService(document.NewRepository(db), authorizer)
 	settlementService := settlement.NewService(settlement.NewRepository(db), authorizer)
+	financeService := finance.NewService(finance.NewRepository(db), authorizer)
 
 	created, err := identityService.BootstrapPlatformAdmin(startupCtx, cfg.Bootstrap.AdminUsername, cfg.Bootstrap.AdminPassword)
 	if err != nil {
@@ -132,6 +134,11 @@ func run(ctx context.Context, configPath string) error {
 	inboundHandler := document.NewHandler(documentService, document.KindInbound)
 	outboundHandler := document.NewHandler(documentService, document.KindOutbound)
 	settlementHandler := settlement.NewHandler(settlementService)
+	// 付款 / 收款 / 开票共用同一个财务服务，只在构造 Handler 时区分 kind。
+	// kind 固化在路由上，客户端无法通过请求体篡改记录类型。
+	paymentHandler := finance.NewHandler(financeService, finance.KindPayment)
+	receiptHandler := finance.NewHandler(financeService, finance.KindReceipt)
+	invoiceHandler := finance.NewHandler(financeService, finance.KindInvoice)
 	router := httpserver.NewRouter(httpserver.RouterDependencies{
 		Logger:        logger,
 		CORS:          cfg.CORS,
@@ -167,6 +174,16 @@ func run(ctx context.Context, configPath string) error {
 				Create: settlementHandler.Create, List: settlementHandler.List, Get: settlementHandler.Get,
 				Approve: settlementHandler.Approve, Reject: settlementHandler.Reject,
 			},
+			Payments: httpserver.FinanceRouteSet{
+				Create: paymentHandler.Create, List: paymentHandler.List, Revoke: paymentHandler.Revoke,
+			},
+			Receipts: httpserver.FinanceRouteSet{
+				Create: receiptHandler.Create, List: receiptHandler.List, Revoke: receiptHandler.Revoke,
+			},
+			Invoices: httpserver.FinanceRouteSet{
+				Create: invoiceHandler.Create, List: invoiceHandler.List, Revoke: invoiceHandler.Revoke,
+			},
+			FinanceStatement: paymentHandler.Statement,
 		},
 	})
 
