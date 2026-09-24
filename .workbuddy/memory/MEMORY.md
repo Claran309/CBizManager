@@ -76,6 +76,31 @@
     快照无 `version` 列、无修改接口，要更正只能重新生成。业务员姓名随快照冻结落库。
   - 单号 `ZJS + YYYYMM + -4位当月序号`；**批次号取本批第一张快照的单号**；**审计逐张写**（不是整批一条）。
 
+## Flutter 客户端（`client/`）约定与门禁
+
+- **身份的唯一事实源是 `/auth/me` 响应体，客户端绝不解析 JWT 声明**。`AuthProfile.fromJson`
+  是**严格**解析：身份组合自相矛盾（平台管理员带 group/memberType、主账号 member_type≠owner、
+  成员 member_type≠member、缺 `permission_codes`）一律抛 `FormatException`，不静默降级成
+  「权限更宽」的对象。新增身份字段时同步补 `AuthProfile` 与契约 `MeData`。
+- **`AuthSession.scopeKey`**（`user:group:accountType:memberType:mustChangePassword:权限排序`）
+  是会话级 Provider 的重建键；账号 / 组 / 角色 / 改密态 / 权限任一变化都会整体销毁重建。
+- **注册不建立会话**：`/api/v1/auth/register` 只回 `user` + `group`（没有令牌），成功后必须停在
+  未登录态并把用户名回填登录页；否则新人被静默当成已登录，**绕过登录页与强制改密两道关**。
+- **改密复用同一个 access token**：后端 `ChangePassword` 既不吊销当前令牌也不签发新的，
+  所以客户端改完密码要**用原令牌重读 `/auth/me`**，不能重新登录、不能把密码写进任何本地存储。
+- **改密失败必须保留原已登录会话**（只写 `state.failure`），否则用户会以为被登出。
+- **Controller 的错误处理按返回类型分**：返回 `void` 的方法按项目既有约定只写 `state.failure`
+  （不抛）；返回**业务值**的方法（如 `register` 返回 `RegistrationResult`）必须把 `AppFailure`
+  原样抛出——调用方要区分成功与失败（成功要跳回登录页），而返回值无法用空值表达失败。
+- **所有 Dio 适配器都要包一层 `_guard`**，把 `DioException` → `mapDioFailure`、
+  `FormatException`/`TypeError` → `ServerFailure`。否则原始 `DioException` 会逃逸出状态机，
+  `state.failure` 永远拿不到值、字段错误也映射不到输入框。
+  `DioAuthRemoteDataSource` 原先是漏的（Task 2 补齐）。
+- **改接口就要立刻 `flutter analyze`**：给 `abstract interface class` 加方法会让**所有**测试替身
+  编译失败（`non_abstract_class_inherits_abstract_member`），`flutter test` 不一定先报这个。
+- **客户端门禁三道**：`dart format --output=none --set-exit-if-changed lib test` →
+  `flutter analyze` → `flutter test`。
+
 ## GORM / MySQL 方言坑（SQLite 单测查不出，必须真跑 MySQL）
 
 - **`groups` 是 MySQL 8.0 保留字**（窗口函数的 `GROUPS` 帧单位）。GORM `Table()` 有两条分支：
@@ -125,3 +150,133 @@
   共享 helper 造出库单别漏这个字段。
 - 集成测试断言易错点：`created_at` 列是 `DATETIME(6)`（微秒），而代码里用的是纳秒时钟，
   **不要逐位比较时间**，改成「差在一毫秒以内」判定。
+- **本机环境（及宿主注入的子进程环境）带 `HTTP_PROXY` / `HTTPS_PROXY` 指向本机代理端口，
+  这是 `flutter test` 全盘失败的头号原因**：测试框架在 127.0.0.1 起 harness 服务，`flutter_tester`
+  要直连完成 WebSocket 握手，`dart:io` 的 `HttpClient` 尊重 `HTTP_PROXY` 把握手塞给代理，于是报
+  `Unable to connect to flutter_tester process: WebSocketException: Invalid WebSocket upgrade request`。
+  **判据**：连改动前的旧测试文件也一起挂 ⇒ 环境故障，不要改代码。
+  取证：`flutter test <旧文件> --verbose`，在 `Starting flutter_tester process with command=`
+  那一行的 `environment={...}` 里能看到注入的 `HTTP_PROXY`。
+  修法：跑前 `Remove-Item Env:HTTP_PROXY,Env:HTTPS_PROXY,Env:ALL_PROXY` 并
+  `$env:NO_PROXY='127.0.0.1,localhost,::1'`。宿主可能每轮重新注入，**每次都要清**。
+  现成包装脚本：`.workbuddy/tmp/flutter_test.ps1`（已封装清代理 + 编码 + 落日志）。
+- **抓 flutter 日志不能用 PowerShell 的 `*>` / `Out-File`**：flutter 输出 UTF-8，而 PowerShell 按
+  系统代码页（GBK）解码子进程输出，中文用例名会变成 `韬綋鐭╅樀` 这种乱码，
+  且 `Read` 会报 "Cannot display content of binary file"。正确做法：先设
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`，把输出**捕获进变量**，
+  再用 `[System.IO.File]::WriteAllText(..., New-Object System.Text.UTF8Encoding($false))` 落盘。
+- **PowerShell 工具在本会话不返回 stdout**，`Write-Output` 看不到结果 ⇒ 一律写文件再 `Read`。
+- **写 git 提交信息文件不要用 `Out-File -Encoding UTF8`**：Windows PowerShell 5.1 会加 UTF-8 BOM，
+  于是提交标题变成 `\ufefffeat: ...`。用 Write 工具或 .NET UTF8Encoding($false) 写。
+  自检脚本：`.workbuddy/tmp/check_bom.py`（扫最近提交标题是否以 BOM 开头）。
+- **本机 `dart format` 报 Changed 不要先归因于 CRLF**：`client/` 下的文件实测是**纯 LF**，
+  `dart format` 只在真需要折行 / 调缩进时才报（超过 80 列未折行最常见）。
+  判断方法：用 Python 统计 `\r\n` 与孤立 `\n`。git 打印的 `LF will be replaced by CRLF`
+  只是 `core.autocrlf=true` 的提示，无害。
+
+## Flutter 客户端（client/）既有约定与坑
+
+- **身份只从 `/auth/me` 响应体读取，绝不解析 JWT 声明**；`AuthSession.scopeKey`
+  由 user/group/角色/改密态/权限集合拼成，作为「会话作用域」的重建键。
+- **Provider 分两层**（`client/lib/app/session_scope.dart`）：
+  - 应用级、跨会话共享：`dioProvider` / `appDatabaseProvider` / `nativeCacheEnabledProvider`；
+  - 会话级、不设默认实现（误读即抛 `StateError`）：`activeSessionProvider` 与各业务 Repository。
+  应用外壳 `app.dart` 只在已登录时包 `AuthenticatedSessionScope`
+  （`ProviderScope(key: ValueKey(session.scopeKey))`），登出即卸载销毁旧作用域。
+- **Riverpod 3 传递式作用域必须显式声明 `dependencies:`**：只声明了
+  `$allTransitiveDependencies` 的 Provider 才会被挂到「覆盖了其依赖项的那个容器」，
+  否则退回根容器被所有会话共享。Controller 若只通过**方法里的 `ref.read`** 取仓储，
+  Riverpod 无从推断 ⇒ 必须在 `NotifierProvider(..., dependencies: [xxxRepositoryProvider])`
+  手写一行，否则换账号/换组后旧数据会跟过来。
+- **Notifier dispose 后写 `state` 会抛错**：Controller 用 `_disposed` 标记
+  （`ref.onDispose` 里置位）作废在途结果；排队的写操作要在调用时**先取好 Repository**，
+  因为 dispose 之后再碰 `ref` 同样会抛。
+- **Riverpod 3 把 provider 内部异常包成 `ProviderException`（`.exception` 才是原始错误）**
+  再交给 `read` 调用方；`overrides` 装配阶段抛的错则是裸异常。
+  `Override` / `ProviderException` 不在主入口导出，需
+  `import 'package:flutter_riverpod/misc.dart' show ...`。
+- 同一容器重复覆盖同一 Provider 会被断言拦下
+  （`Tried to override a provider twice within the same container`）。
+- 渲染真实 App 的 Widget 测试必须像 `bootstrap` 一样提供 `dioProvider`，
+  否则 `AuthenticatedSessionScope.build` 当场抛 `Dio has not been configured`。
+- **改 `abstract interface class` 后立刻跑 `flutter analyze`**：`flutter test` 不一定先报
+  漏实现（`non_abstract_class_inherits_abstract_member`），analyze 才会。
+## Flutter 路由与守卫（client/lib/app/router.dart）
+
+- **12 条稳定路由**：`/splash` `/login` `/register` `/change-password`
+  `/platform/groups` `/platform/groups/new` `/platform/groups/:groupId`
+  `/home` `/invitations` `/members` `/members/:membershipId/permissions` `/dictionaries`。
+  **字面量路由必须声明在参数路由之前**（`/platform/groups/new` 否则会被
+  `/platform/groups/:groupId` 抢成 `groupId='new'`）。
+- **守卫判定顺序即语义**（`authRedirect`，导出 `isPublicLocation` /
+  `isPlatformLocation` / `isOwnerOnlyLocation` / `isMemberManagementLocation` / `roleHome`）：
+  restoring → 未登录 → 强制改密 → 平台/租户分域 → owner 专属 → `member.manage` → 过渡页。
+  - 未登录判 `session == null`（不是 `phase == unauthenticated`），顺带兜住 release 下
+    断言失效的「已登录却无会话」。
+  - 强制改密**优先于**角色分域；owner 专属判 `accountType`，不判权限码
+    （`hasPermission` 对 owner 恒真，判码会放行持码的普通成员）。
+  - **无权地址统一回角色首页**（`roleHome`：平台管理员 `/platform/groups`，其余 `/home`），
+    绝不回登录页——合法登录态被踢回登录页像被登出，且回角色首页才能根除循环。
+- **占位页按「后续任务的最终路径」落盘**：`features/<feature>/presentation/<page>.dart`，
+  每个路由一个具名可替换目标类（不用共用的 `_RouteShell`）。后续任务只替换文件内容，
+  不必再改路由 import；若把占位类写在 `router.dart` 里，后面建真实类时会撞名。
+- 路由测试用 `UncontrolledProviderScope` + 自建 `ProviderContainer`，
+  可直接 `container.read(routerProvider).go('/deep/link')` 模拟深链。
+## Flutter 展示层约定（client/lib/core/presentation/）
+
+- **`ResponsiveScaffold`**：断点 `kResponsiveScaffoldBreakpoint = 720` 逻辑像素。
+  窄屏 `Scaffold + AppBar + NavigationBar`；宽屏 `AppBar + Row(NavigationRail | VerticalDivider | Expanded(body))`。
+  `AppDestination{label, icon, route}` 只描述「叫什么/长什么样/去哪」，两种布局共用一份。
+  - 高亮解析：先精确匹配，再取**最长**路径前缀（`/members/7/permissions` → 点亮「成员」）。
+  - 点当前项**直接 return**，不 `context.go`，否则重建页面会丢滚动位置与未提交表单。
+  - `build` 里 assert：AppBar 的 `IconButton` 必须提供 `tooltip`。
+  - 框架约束：`NavigationBar.selectedIndex` 是非空 `int` 且要求 `destinations.length >= 2`；
+    `NavigationRail.selectedIndex` 是 `int?`。所以索引用 `int?`，Rail 直传、Bar 传 `?? 0`。
+- **`AsyncStateView`**：加载/失败/空/内容四态统一视图，判定顺序
+  **失败 > 加载 > 空 > 内容**。要「刷新时保留旧列表」就传
+  `isLoading: isLoading && items.isEmpty`。`loadingMessage` / `emptyMessage` 可覆盖。
+  **实现为无类型参数**（计划写作 `AsyncStateView<T>`，但 T 不出现于该 API 任何位置）。
+- **`FailurePresenter.present(AppFailure)` → `FailurePresentation{message, fieldErrors,
+  requestId, shouldLeavePage, shouldRefresh}`**：
+  Validation 保留服务端 message + fields；Conflict 丢弃底层文案换固定话术 + `shouldRefresh`；
+  Forbidden `shouldLeavePage`；**Unauthenticated 两个标记都不设**（全局单飞刷新 + 守卫负责跳转，
+  页面再跳会抢跑）；Network 文案必须点明「需要联网」；Server 带 requestId。
+  失败视图 Request ID 用 `SelectableText`（唯一用途是被复制走），
+  冲突时按钮文案变「重新加载」、其余「重试」。
+- **Widget 测试坑**：有 `CircularProgressIndicator` 时只能 `pump()`，`pumpAndSettle()` 会因无限动画超时；
+  点导航项要用 `find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).first`，
+  否则可能点到 AppBar 同名标题上、变成「什么都没发生却通过」。
+## Flutter 平台治理数据层约定（client/lib/features/platform/ + core/network/page_result.dart）
+
+- **列表分页字段是平铺的**：本项目所有列表接口把 `items / page / page_size / total`
+  直接放在响应 `data` 里（`GroupPageData`），**不是**嵌一层 `pagination`。
+  字典那个接口才是嵌 pagination 的，别互相照抄。统一走
+  `PageResult<T>.fromJson(data, decodeItem)`（`core/network/page_result.dart`），
+  它严格校验（items 必须是对象数组、page/pageSize >= 1、total >= 0），
+  非法结构一律 FormatException —— 宁可报错也不放行会被渲染成「翻不到头的空列表」的数据。
+- **领域解析一律严格**：缺字段 / 类型不符 / 时间串非法都抛 `FormatException`
+  （仓储的 `_guard` 会收敛成 `ServerFailure`）。枚举用 `fromWireValue`，
+  未知取值抛错，不做静默降级。时间统一 `DateTime.parse(v).toUtc()`。
+- **平台仓储只持有 Dio**，**不接 AppDatabase / Outbox**：平台管理员没有 group，
+  缓存键只能落到 `group_id=0`；而停用整组、交接主账号是全局破坏性操作，离线排队
+  偷偷执行比当场失败危险。有测试守着「跑完全部方法后本地库与 Outbox 全空」。
+- **`platformRepositoryProvider` 定义在 `features/platform/data/platform_repository.dart`
+  （data 层）**，默认抛 StateError；`session_scope.dart` 里**只有 platformAdmin 分支**
+  用 `DioPlatformRepository(appDio)` override，租户分支不装配（读取抛 StateError）。
+  这是与 member/dictionary（provider 定义在 application 层的 controller 文件里）
+  不同的地方：因为 Task 6 要先能在 session_scope 里 override，而 controller 是 Task 7 才建。
+- **交接主账号 `changeOwner` 是「PUT 后再 GET 详情」两次请求**：契约的写响应
+  `OwnerChangedData{group, owner}` 不含 `member_counts` / `owner_candidates`，
+  而方法返回类型是 `PlatformGroupDetail`。重读换来的是自洽数据（被提升者已从候选人消失）。
+  写假适配器时**必须按 method 分发响应**，否则重读那步会拿到写响应而解析失败。
+- **两种交接模式（existing_member / new_account）用 sealed class + `switch` 穷尽匹配
+  拼互斥请求体**，不是「大对象 + 可空字段」：新增模式会编译报错；测试断言另一种模式的
+  字段一个都不能出现（多带会让服务端 400，或更糟，被忽略而让人以为生效了）。
+- **`GroupMemberCounts` 三个键必填且非负**：契约把它写成松散 map，但缺键退化成 0
+  会显示「活跃成员 0 人」这种会让人以为组被清空的假数字；Go 的 `map[string]int`
+  零值键不会消失，严格假设成立。
+- **可选查询参数用「有才带」写法**（`if (x != null) 'k': x`）：显式传 null 会序列化成空串，
+  服务端按非法枚举拒绝，于是「不筛」反而报 400。
+- **Dart 语法坑**：命名构造函数**不能**带类型参数（`factory PageResult.fromJson` 才对，
+  调用处照写 `PageResult<int>.fromJson`）；sealed 基类要写成命名参数
+  `const Base({required this.version});`，子类才能 `required super.version`。
