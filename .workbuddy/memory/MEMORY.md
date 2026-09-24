@@ -232,6 +232,9 @@
   - `build` 里 assert：AppBar 的 `IconButton` 必须提供 `tooltip`。
   - 框架约束：`NavigationBar.selectedIndex` 是非空 `int` 且要求 `destinations.length >= 2`；
     `NavigationRail.selectedIndex` 是 `int?`。所以索引用 `int?`，Rail 直传、Bar 传 `?? 0`。
+  - **`destinations` 少于 2 项时整个导航都不渲染**（`hasNavigation = destinations.length >= 2`），
+    否则会撞上 `NavigationBar` 的 `length >= 2` 断言直接崩 —— 平台管理员只有「组管理」
+    一项，正是这种情形。退化后就是一块普通内容区，该分支有独立测试守着。
 - **`AsyncStateView`**：加载/失败/空/内容四态统一视图，判定顺序
   **失败 > 加载 > 空 > 内容**。要「刷新时保留旧列表」就传
   `isLoading: isLoading && items.isEmpty`。`loadingMessage` / `emptyMessage` 可覆盖。
@@ -314,3 +317,40 @@
   跳前调 `reset()`（避免返回时重复跳转）。回调在页面卸载后触发会操作已销毁的 Context。
 - 测试夹具：`test/support/fake_platform_repository.dart` 是「排队响应 → 注入错误 →
   默认结果」三档优先级的可编程假仓储，新模块的 Controller 测试可照这个模式写。
+
+## Flutter 页面层约定（client/lib/features/*/presentation/）
+
+- **平台侧三个页面共用 `platform_shell.dart`** 的 `platformDestinations` /
+  `groupStatusLabel` / `GroupStatusChip`：文案散落各文件迟早出现「列表页叫『已停用』、
+  详情页叫『停用』」这种不一致。
+- **表单的服务端字段错误必须合进 validator**：`TextFormField` 内部会
+  `copyWith(errorText: _errorText.value)`，validator 返回 null 时就把
+  `decoration.errorText` 抹成 null —— 挂在 decoration 上等于没挂。做法是失败时
+  `setState` 存 `fields` 再 `_formKey.currentState!.validate()` 重跑；
+  配套每个字段 `onChanged` 清掉自己的服务端错误。只有「每条错误都能落到本页字段」时
+  才不弹提示条（否则同一错误说两遍）。
+- **不要用 `RadioListTile.groupValue` / `onChanged`（已废弃，会让 analyze 非零退出）**：
+  单选列表用 `ListTile(selected:, leading: Icon(radio_button_checked/unchecked), onTap:)` 自绘。
+  （`DropdownButtonFormField.value` 也已改名 `initialValue`；`DropdownButton.value` 没有改。）
+- **路由参数非法用 `redirect`，不要在 builder 里 `go()`**（构建期间导航会撞断言）。
+  决策抽成纯函数 `parseGroupId` / `groupDetailRedirect` 以便零副作用断言；
+  提示经 query 传参（`?notice=invalid_group_id`，地址栏与内容一致），
+  页面在 `initState` 首帧后弹 SnackBar，**并在 `didUpdateWidget` 补一次** ——
+  同页只换 query 时 `initState` 不会再跑，不补用户就完全看不到反馈。
+- **对话框只收意图**：`ChangeOwnerDialog.show(...)` 返回 sealed draft 或 null，
+  自身不发请求、不碰 Provider，页面拿到非空才调 Controller。候选人空时默认落
+  `new_account` 模式（existing 模式无边可选，把用户丢在空列表前是最没必要的挫败）。
+  两种模式控件互斥（`SegmentedButton`），避免「两组都填」造出自相矛盾的请求。
+- **列表页按内容区宽度（`LayoutBuilder` 的 constraints）而非屏幕宽度切换卡片/表格**：
+  宽屏左侧有导航栏，用屏幕宽度会让表格挤进一条比实际更窄的缝里。
+- **失败呈现分档**：已有数据时只弹 SnackBar（冲突附「刷新」动作），不把整张表/整页
+  换成错误视图；只有「什么都没有」的首次加载失败才交给 `AsyncStateView` 整页呈现，
+  同一条错误不会说两遍。
+- **页面测试不要套真实 App 壳**（`CBizDocsApp` 会由会话作用域装配**真实 Dio**），
+  改「最小 GoRouter + `ProviderScope(overrides: [repo.overrideWithValue(fake)])`」；
+  `Override` 必须从 `package:flutter_riverpod/misc.dart` 导入，主入口没有它。
+  断言「提交中禁用」时请求挂在未完成的 `Completer` 上、只 `pump()` 一帧
+  （按钮已换成 spinner，`pumpAndSettle` 会超时）。
+- 后端 `ValidationErrors` 产出的 field 名就是契约里的 snake_case
+  （`name` / `owner_username` / `owner_display_name` / `owner_temporary_password`），
+  客户端可直接按契约字段名挂错误。
