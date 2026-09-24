@@ -253,9 +253,52 @@
   页面再跳会抢跑）；Network 文案必须点明「需要联网」；Server 带 requestId。
   失败视图 Request ID 用 `SelectableText`（唯一用途是被复制走），
   冲突时按钮文案变「重新加载」、其余「重试」。
+- **`ServerFieldErrorsMixin<T extends StatefulWidget>`（`form_feedback.dart`）**：
+  四个表单页（登录 / 注册 / 改密 / 新建业务组）共用的「服务端逐字段错误」状态。
+  实现方只需给出 `formFieldNames`（本页真正渲染了输入框的契约字段名）与 `formKey`，然后：
+  `validateRequired` / `validateMinLength`（**服务端错误优先于本地规则** —— 服务端知道得更多，
+  比如「该账号已被占用」本地判断不了）、`clearServerError(field)`（用户一改就清，
+  否则「组名已存在」会一直挂着，哪怕用户已经改名）、`presentFieldErrors(presentation)`
+  （每条错误都能挂到本页输入框才内联并返回 true，否则返回 false 让调用方弹条 ——
+  同一条错误不说两遍）、`clearAllServerErrors()`、`showMessage()`。
+  抄四遍的必然结果是有三份会漏掉「用户一改就清」。
+- **`PasswordField`（`password_field.dart`）**：自带「显示 / 隐藏」开关的密码框，5 处密码输入共用。
+  可见性状态留在组件内部**不上传**。手写一遍就会在某一处漏 `obscureText`（明文显示在屏幕上）
+  或漏 tooltip（读屏用户听到一个没有名字的按钮）。`autofillHints` 固定为空数组：
+  登录账号是组内自建的，让系统猜「保存的密码」只会给错候选。
 - **Widget 测试坑**：有 `CircularProgressIndicator` 时只能 `pump()`，`pumpAndSettle()` 会因无限动画超时；
   点导航项要用 `find.descendant(of: find.byType(NavigationBar), matching: find.text(label)).first`，
   否则可能点到 AppBar 同名标题上、变成「什么都没发生却通过」。
+- **`find.text()` 连 `EditableText` 的 controller 内容一起匹配**。断言「密码没泄漏到提示里」时
+  `find.text('secret')` 会命中输入框自己那条 `EditableText`，红得莫名其妙。
+  要断言「没有哪个 Text 拿着它」就用 `find.widgetWithText(Text, ...)`，
+  要断言「提示条里没有它」就 `find.descendant(of: find.byType(SnackBar), matching: ...)`。
+## Flutter 认证与会话约定（client/lib/core/auth/）
+
+- **`AuthController.login` 失败后必须落 `AuthPhase.unauthenticated`，不能保留原 phase。**
+  初始状态是 `AuthState(restoring)`；失败若保留 `restoring`，守卫只允许 `restoring` 停在
+  `/splash` ⇒ 用户会被**永久留在启动页**上出不来。（`changePassword` 正相反：必须保留已有会话，
+  不能把人踢下线。）登录的语义就是「试图建立会话」，没建立起来就一定是未登录。
+- **三个认证流程的失败传递方式不同，不要统一**：`login` / `changePassword` 把详情写进
+  `state.failure` 并**吞掉异常**（页面 `await` 后读一次 `state.failure` 即可，UI 层不用再包
+  try/catch —— 那一层迟早有人忘了写，而「点了登录什么也没提示」是最难受的一种坏）；
+  只有 `register` **原样 rethrow**，因为它的返回类型 `RegistrationResult` 表达不了失败，
+  而调用方必须区分成败（成功要跳回登录页）。
+  两者都用同一条读数判据：开工时会重建一个不带 failure 的状态 ⇒ `await` 之后读到的非空
+  `failure` 一定属于本次。
+- **注册不建立会话**：服务端不签发令牌，成功后 `loginPrefill = result.username`，
+  页面 `context.go('/login')`（用 go 不用 push，免得返回栈里留着用过的注册表单），
+  登录页在 `initState` 里读 `loginPrefill` 预填。
+- **`AuthSession.scopeKey`** 是会话级依赖的装配键：账号 / 所属组 / 角色 / 改密态 /
+  权限集合**任一变化**都会得到不同 key，供 Riverpod 整体销毁并重建会话级 Provider。
+- **强制改密页刻意不渲染任何业务导航**（传空 `destinations`）：强制改密期间所有业务地址都会被
+  守卫弹回本页，摆一排点了就回来的导航项只会让用户以为功能坏了。但**必须**留「退出登录」——
+  一个拿不到旧密码的用户不该被永久锁死在这一页上。
+- **已知遗留（属 `core/network`，尚未动手）**：`ApiClient.canRefresh` 只排除了 `/auth/refresh`
+  与已重试的请求，**没排除 `/auth/login` / `/auth/web/login`** ⇒ 密码输错（401）会触发一次
+  无意义的令牌刷新（native 无刷新令牌 / web 无 CSRF，必然失败 ⇒ `clearSession()` + invalidator）。
+  最终结果碰巧是对的（失败详情随后照样落进状态），但多跑一次往返、还顺手清了一次会话状态。
+
 ## Flutter 平台治理数据层约定（client/lib/features/platform/ + core/network/page_result.dart）
 
 - **列表分页字段是平铺的**：本项目所有列表接口把 `items / page / page_size / total`
@@ -448,6 +491,15 @@
   `Override` 必须从 `package:flutter_riverpod/misc.dart` 导入，主入口没有它。
   断言「提交中禁用」时请求挂在未完成的 `Completer` 上、只 `pump()` 一帧
   （按钮已换成 spinner，`pumpAndSettle` 会超时）。
+  **但认证 / 角色落点这类用例是例外，要走真实的 `routerProvider`**：
+  手搭几条 GoRoute 会把「落点由守卫算出来」整个测没，剩下一个自己导航给自己看的假流程。
+  已封成 `test/support/real_router_harness.dart` 的 `pumpRealApp(tester, repository:)` ——
+  装配假仓储 → `pumpWidget` → 调一次 `restore()` → 守卫自动把人送到
+  `/login`（未登录）/ `/change-password`（待改密）/ `/home`（正常），**调用方不需要自己 go**。
+  配套 `expectTenantHome()`（限定 `find.widgetWithText(AppBar, '首页')`，
+  因为租户壳的导航项也叫「首页」，全树搜索会命中两次）与
+  `expectDestination(label, visible: …)`（同时查 `NavigationRail` 与 `NavigationBar` 子树，
+  断言就不依赖窗口宽度）。
 - **点下拉 / 菜单里的某一项要用 `find.text(label).last`**：下拉**打开后**，按钮自己显示的
   那一项（当前值）会与菜单里的同一项一起命中 `find.text(label)`，唯一匹配的写法直接
   `Found 2 widgets` 报错。实测（初始值 `A`、选项 `A`/`B`）：关闭态 `A=1 / B=0`，
@@ -461,10 +513,20 @@
 - 后端 `ValidationErrors` 产出的 field 名就是契约里的 snake_case
   （`name` / `owner_username` / `owner_display_name` / `owner_temporary_password`），
   客户端可直接按契约字段名挂错误。
-- **导航目的地常量要公开共享，不要每页私有各写一份**：`memberDestinations` 由
-  `members_page.dart` 公开导出，权限页（`/members/:id/permissions`）复用同一份 ——
-  `ResponsiveScaffold` 靠「最长路径前缀」把下级页也算进「成员」这一项。
-  各页各写一份，将来加了第二项必然对不上。
+- **租户侧导航只有一处定义：`tenantDestinations(AuthProfile?)`**
+  （`features/home/presentation/tenant_shell.dart`）。成员 / 成员权限 / 字典 / 邀请码 / 首页
+  五页全部复用它。**此前每页各持有一份「单项」列表，而 `ResponsiveScaffold` 在目的地 < 2 时
+  根本不渲染导航** —— 等于整条租户链路没有导航，业务员在字典页想去首页只能手改地址。
+  规则：owner 得 `首页/邀请码/成员/字典`；普通成员恒得 `首页/字典`，
+  只在 `hasPermission('member.manage')` 时补 `成员`；**普通成员永远没有邀请码入口**；
+  `profile == null` ⇒ 返回**空列表**（宁可不显示，也不猜一个身份 ——
+  猜成 owner 会让刚被降权的账号继续看见管理入口）。
+  平台侧同理，参考 `platformDestinations`。
+- **主账号的 `permission_codes` 恒为空数组**（权限是隐式的，靠 `accountType` 判）。
+  任何「照着 `permission_codes` 裁剪导航 / 写入口 / 渲染权限摘要」的写法都会**把主账号的
+  管理入口全砍掉**，必须走 `AuthProfile.hasPermission`（内部已处理主账号）。
+  首页的权限摘要同理：不能照 `permission_codes` 渲染，那会得出「没有任何权限」
+  这种与事实相反的画面，要说「组内全部权限」。
 - **角色裁剪是两个不同的判定，别混**：
   `canManageStatus = 组主账号 || hasPermission('member.manage')`（改状态）；
   `canManagePermissions = accountType == groupOwner`（改权限）。
