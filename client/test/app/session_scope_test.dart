@@ -277,6 +277,7 @@ final Matcher _throwsStateError = throwsA(
 
 const _memberForScope = Member(
   membershipId: 7,
+  userId: 101,
   username: 'alice',
   displayName: 'Alice',
   memberType: 'member',
@@ -302,7 +303,11 @@ final class _GatedMemberRepository implements MemberRepository {
   final Completer<Member> writeGate;
 
   @override
-  Future<List<Member>> listMembers() => loadGate.future;
+  Future<List<Member>> listMembers(MemberQuery query) => loadGate.future;
+
+  @override
+  Future<List<PermissionCatalogItem>> getPermissionCatalog() =>
+      throw UnsupportedError('本用例不覆盖权限目录');
 
   @override
   Future<Member> changeStatus(
