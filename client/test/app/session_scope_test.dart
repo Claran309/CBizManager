@@ -5,6 +5,7 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_controller.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/data/dictionary_repository.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/domain/dictionary_entry.dart';
+import 'package:c_biz_docs_manager/features/invitations/data/invitation_repository.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
 import 'package:c_biz_docs_manager/features/members/domain/member.dart';
@@ -117,10 +118,40 @@ void main() {
     );
     // 平台治理是他的本职工作，必须装配；而且它不需要 userId / groupId，
     // 看的是全平台的组，所以这里没有「范围收敛」可言。
-    expect(scope.read(platformRepositoryProvider), isA<DioPlatformRepository>());
+    expect(
+      scope.read(platformRepositoryProvider),
+      isA<DioPlatformRepository>(),
+    );
     // 「未装配」意味着读取立刻抛错，而不是悄悄退化成某个能读到别组数据的默认实现。
     expect(() => scope.read(memberRepositoryProvider), _throwsStateError);
     expect(() => scope.read(dictionaryRepositoryProvider), _throwsStateError);
+    expect(() => scope.read(invitationRepositoryProvider), _throwsStateError);
+  });
+
+  test('邀请码仓储只装配给组主账号', () {
+    final ownerScope = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(ownerSession()),
+    );
+    addTearDown(ownerScope.dispose);
+    expect(
+      ownerScope.read(invitationRepositoryProvider),
+      isA<DioInvitationRepository>(),
+    );
+
+    // 普通成员就算被授予了 member.manage 也只是能管成员，不该能凭空造出
+    // 入组凭证 —— 那等于给自己发一张提权门票。所以这里刻意不装配。
+    final managingMember = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(
+        memberSession(permissionCodes: const <String>['member.manage']),
+      ),
+    );
+    addTearDown(managingMember.dispose);
+    expect(
+      () => managingMember.read(invitationRepositoryProvider),
+      _throwsStateError,
+    );
   });
 
   test('租户会话读不到平台治理仓储', () {

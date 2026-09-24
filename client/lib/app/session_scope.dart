@@ -2,6 +2,7 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/database/app_database.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_controller.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/data/dictionary_repository.dart';
+import 'package:c_biz_docs_manager/features/invitations/data/invitation_repository.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
 import 'package:c_biz_docs_manager/features/platform/data/platform_repository.dart';
@@ -157,6 +158,21 @@ List<Override> _sessionOverrides({
         cacheEnabled: canCache,
       ),
     ),
+    // 邀请码管理**只属于组主账号**。普通成员就算被授予了 `member.manage`
+    // 也只是能管成员，不该能凭空造出入组凭证 —— 那等于给自己发一张提权门票。
+    //
+    // 所以这里不装配它的仓储：未装配意味着读取立刻抛 StateError，而不是悄悄
+    // 退化成某个能读到邀请码的默认实现。界面入口那一侧由路由守卫挡住（`/invitations`
+    // 是 owner-only），装配层这一侧再挡一道，防止将来有人从别处误读。
+    //
+    // 判两个条件而不是只判 accountType：AuthProfile 的严格解析已经保证
+    // 「group_owner ⇒ member_type = owner」，但装配层不该依赖别处的校验结果 ——
+    // 万一有谁手搓了一个不完整的 profile（测试里就这么干过），这里必须自己站稳。
+    if (profile.accountType == AccountType.groupOwner &&
+        profile.memberType == MemberType.owner)
+      invitationRepositoryProvider.overrideWithValue(
+        DioInvitationRepository(appDio),
+      ),
   ];
 }
 
