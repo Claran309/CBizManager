@@ -184,6 +184,16 @@
   `dart format` 只在真需要折行 / 调缩进时才报（超过 80 列未折行最常见）。
   判断方法：用 Python 统计 `\r\n` 与孤立 `\n`。git 打印的 `LF will be replaced by CRLF`
   只是 `core.autocrlf=true` 的提示，无害。
+- **跨端构建的三个环境阻塞（Task 17 实测）**：
+  - **Android**：Gradle 在沙箱里报 `FileNotFoundException ...\9.1.0\transforms\xxx.lock
+    (拒绝访问)`，重试换了个 hash 仍复现 ⇒ 沙箱对 Gradle **文件锁机制**的干扰，不是单个
+    stale lock（删掉报错那个也没用）。
+  - **Windows**：plugin symlink 阻塞 —— `PathExistsException: Cannot create link ...
+    .plugin_symlink`，根因**开发者模式未启用**（计划 Step4 预料到）。
+  - **Windows 另有一坑**：`client/build/windows/CMakeCache.txt` 是**旧路径
+    `d:/CodeStudy/ProjectF/`**（项目从 ProjectF 搬到了 CBizDocsManager），CMake 报
+    `source does not match`。修法：删 `client/build/windows/` 重建（build 在 gitignore 里，无损）。
+  - Web 构建不依赖上述任何一点，✅ 直接成功。
 
 ## Flutter 客户端（client/）既有约定与坑
 
