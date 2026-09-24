@@ -273,6 +273,15 @@ func TestDocumentInboundOutboundFlow(t *testing.T) {
 	} else {
 		t.Fatal("member List(business_user_id=other) = nil error, want FORBIDDEN")
 	}
+	// 月度汇总同样是派生视图，未授权时必须收敛到本人。
+	// 汇总接口没有单号参数，容易被误以为「天然安全」，这里专门盯住它不能靠猜参数越权。
+	scopedSummary, err := documentService.MonthlySummary(ctx, memberPrincipal, document.KindInbound, "2026-05", 10)
+	if err != nil {
+		t.Fatalf("member MonthlySummary() error = %v", err)
+	}
+	if scopedSummary.DocumentCount != 1 || scopedSummary.TotalAmount.String() != "500.00" {
+		t.Fatalf("member summary = %+v", scopedSummary)
+	}
 
 	// 6. 授信后可见范围放开：view_others 能看他人，但仍不能改他人（缺 edit_others）。
 	if _, err = memberService.ReplacePermissions(ctx, ownerPrincipal, memberMembership.ID, member.ReplacePermissionsRequest{
@@ -357,17 +366,23 @@ func TestDocumentInboundOutboundFlow(t *testing.T) {
 	if summary.TotalAmountUpper != rmb.Upper(summary.TotalAmount) {
 		t.Fatalf("summary upper = %q, want %q", summary.TotalAmountUpper, rmb.Upper(summary.TotalAmount))
 	}
-	if len(summary.Parties) != 1 || summary.Parties[0].PartyName != "代录客户" {
+	// 往来单位分布与 TotalAmount 同一口径：排除作废单、包含草稿单。
+	// 「待补录客户」这张 0 元草稿虽然金额为 0，但它是本月真实存在的往来单位，
+	// 需要提醒业务员补录定价，因此必须出现在列表里（否则金额合计与单据数会对不上）。
+	// 排序按金额倒序：代录客户 500.00 在前，待补录客户 0.00 在后。
+	if len(summary.Parties) != 2 ||
+		summary.Parties[0].PartyName != "代录客户" || summary.Parties[0].TotalAmount.String() != "500.00" || summary.Parties[0].DocumentCount != 1 ||
+		summary.Parties[1].PartyName != "待补录客户" || summary.Parties[1].TotalAmount.String() != "0.00" || summary.Parties[1].DocumentCount != 1 {
 		t.Fatalf("summary parties = %+v", summary.Parties)
 	}
 
-	// 子账号的月度汇总只能统计自己的单据。
+	// 子账号在获得 view_others 之后，月度汇总的数据范围与主账号一致（全组 3 张单）。
 	memberSummary, err := documentService.MonthlySummary(ctx, memberPrincipal, document.KindInbound, "2026-05", 10)
 	if err != nil {
-		t.Fatalf("member MonthlySummary() error = %v", err)
+		t.Fatalf("member MonthlySummary(with view_others) error = %v", err)
 	}
-	if memberSummary.DocumentCount != 1 || memberSummary.TotalAmount.String() != "500.00" {
-		t.Fatalf("member summary = %+v", memberSummary)
+	if memberSummary.DocumentCount != 3 || memberSummary.TotalAmount.String() != "500.00" || len(memberSummary.Parties) != 2 {
+		t.Fatalf("member MonthlySummary(with view_others) = %+v", memberSummary)
 	}
 	// 未授权的月份参数必须被拒绝。
 	if _, err = documentService.MonthlySummary(ctx, ownerPrincipal, document.KindInbound, "2026-13", 10); err != nil {

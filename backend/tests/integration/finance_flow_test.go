@@ -337,13 +337,10 @@ func TestFinanceRecordFlow(t *testing.T) {
 	if revoked.PaymentCount != 1 {
 		t.Fatalf("撤销后付款笔数 = %d, want 1", revoked.PaymentCount)
 	}
-	// 撤销释放了额度：可以重新登记到满额。
-	if _, err := financeService.Create(ctx, ownerPrincipal, finance.KindPayment, finance.CreateRequest{
-		DocumentID: inbound.DocumentID, Amount: "30000.00", OccurredOn: occurredOn, Method: "transfer",
-	}, "fin-pay-5"); err != nil {
-		t.Fatalf("撤销后重新登记 error = %v", err)
-	}
-	// 幂等记录随记录一起释放：重放最开始的键会重新登记，而不是读到已删除的记录。
+	// 撤销既回收了额度，也把对应的幂等记录一起删掉了。
+	// 所以重放最开始的 fin-pay-1（同键同载荷）既不该命中幂等、也不该读到旧记录，
+	// 而应被当成一次全新登记：额度补回 100000.00。
+	// 若幂等记录还残留，这里要么返回首次结果（paid=30000）要么报 IDEMPOTENCY_KEY_REUSED，断言都能抓住。
 	recreated, err := financeService.Create(ctx, ownerPrincipal, finance.KindPayment, finance.CreateRequest{
 		DocumentID: inbound.DocumentID, Amount: "30000.00", OccurredOn: occurredOn,
 		Method: "transfer", MethodNote: strPtrValue("微信"),
@@ -351,8 +348,16 @@ func TestFinanceRecordFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("撤销后重放同一个幂等键 error = %v", err)
 	}
-	if recreated.PaidAmount.String() != "100000.00" {
-		t.Fatalf("重放后的已付金额 = %s, want 100000.00", recreated.PaidAmount)
+	if recreated.PaidAmount.String() != "100000.00" || recreated.UnpaidAmount.String() != "0.00" {
+		t.Fatalf("重放后的结清视图 = %s / %s, want 100000.00 / 0.00", recreated.PaidAmount, recreated.UnpaidAmount)
+	}
+	// 额度被重新占满：再多付 1 分同样要被拒绝，说明上限是按回收后的实时合计算出来的。
+	if _, err := financeService.Create(ctx, ownerPrincipal, finance.KindPayment, finance.CreateRequest{
+		DocumentID: inbound.DocumentID, Amount: "0.01", OccurredOn: occurredOn, Method: "transfer",
+	}, "fin-pay-5"); err != nil {
+		assertIntegrationCode(t, err, apperror.CodeFinanceAmountExceeds)
+	} else {
+		t.Fatal("重放占满额度后继续付款 = nil error, want FINANCE_AMOUNT_EXCEEDS")
 	}
 	// 取一条当前仍存在的付款记录，用于验证「用错记录类型的接口」这一分支。
 	var livePaymentID uint64

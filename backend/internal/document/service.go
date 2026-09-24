@@ -84,6 +84,8 @@ func (s *Service) Create(ctx context.Context, principal identity.Principal, kind
 		return nil, err
 	}
 
+	// Now 用注入时钟：仓储把审计与幂等记录的 created_at 按它落库，
+	// 留零值会被 MySQL 严格模式拒绝（Error 1292: Incorrect datetime value '0000-00-00'）。
 	document, _, err := s.repo.CreateDocument(ctx, CreateInput{
 		GroupID: scope.groupID, Kind: kind, Status: payload.Status,
 		BusinessUserID: payload.BusinessUserID, BusinessDate: payload.BusinessDate,
@@ -93,6 +95,7 @@ func (s *Service) Create(ctx context.Context, principal identity.Principal, kind
 		IdempotencyScope:   idempotencyScope(kind, "create"),
 		IdempotencyKey:     idempotencyKey,
 		RequestFingerprint: fingerprintPayload(kind, payload),
+		Now:                s.now().UTC(),
 		AuditAction:        "document.created",
 		AuditSummary:       fmt.Sprintf("%s %s 已创建", kindLabel(kind), "（单号自动生成）"),
 	})
@@ -130,6 +133,7 @@ func (s *Service) Update(ctx context.Context, principal identity.Principal, kind
 		return nil, err
 	}
 
+	// Now 同样必须来自注入时钟：ReplaceDocument 用它写 updated_at、审计与幂等记录。
 	document, err := s.repo.ReplaceDocument(ctx, UpdateInput{
 		GroupID: scope.groupID, Kind: kind, DocumentID: documentID, ExpectedVersion: request.Version,
 		Status:         payload.Status,
@@ -140,6 +144,7 @@ func (s *Service) Update(ctx context.Context, principal identity.Principal, kind
 		IdempotencyScope:   idempotencyScope(kind, "update"),
 		IdempotencyKey:     idempotencyKey,
 		RequestFingerprint: fingerprintPayload(kind, payload),
+		Now:                s.now().UTC(),
 		AuditSummary:       fmt.Sprintf("%s 已修改", kindLabel(kind)),
 	})
 	if err != nil {

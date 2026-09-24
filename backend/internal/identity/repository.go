@@ -359,6 +359,10 @@ func loadAccessState(db *gorm.DB, userID uint64) (AccessState, error) {
 		Status      string
 		OwnerUserID uint64
 	}
+	// 注意：groups 虽然是 MySQL 8.0 的保留字，但这里 Table() 传的是不含空格的纯表名，
+	// GORM 会走标识符引用路径自动加反引号，并正确设置 Statement.Table（First 的 ORDER BY 才拼得对）。
+	// 千万不要在这里手写反引号：那会让 GORM 走原样 SQL 分支、Statement.Table 落空，
+	// 最终生成 `ORDER BY `.`id`` 这种语法错误。保持原样即可。
 	err = db.Table("groups").Select("id, name, status, owner_user_id").Where("id = ?", membership.GroupID).First(&group).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return AccessState{}, ErrAccessInactive

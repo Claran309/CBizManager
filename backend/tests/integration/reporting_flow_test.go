@@ -481,12 +481,13 @@ func TestReportingFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSnapshot() error = %v", err)
 	}
-	// created_at 列是 DATETIME(6)（微秒），而生成时用的是纳秒时钟，逐位比较会因截断而不等，
-	// 这里按「一毫秒以内」判定，既不放过真正的错位，又不受精度截断干扰。
 	if detail.SnapshotNo != companySnapshot.SnapshotNo {
 		t.Fatalf("快照详情单号 = %q, want %q", detail.SnapshotNo, companySnapshot.SnapshotNo)
 	}
-	if drift := detail.CreatedAt.Sub(createdAt); drift < 0 || drift > time.Millisecond {
+	// created_at 列是 DATETIME(6)（微秒），而生成时用的是纳秒时钟，MySQL 会截断多余位，
+	// 因此读回的值可能比内存里的值略小——这里按绝对差「一毫秒以内」判定，
+	// 既不放过真正的错位，也不受精度截断方向的影响。
+	if drift := detail.CreatedAt.Sub(createdAt); drift > time.Millisecond || drift < -time.Millisecond {
 		t.Fatalf("快照详情创建时间 = %s, want ≈%s", detail.CreatedAt, createdAt)
 	}
 	_, err = reportingService.GetSnapshot(ctx, ownerPrincipal, 999999)

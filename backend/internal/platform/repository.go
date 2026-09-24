@@ -138,7 +138,12 @@ func (r *gormRepository) ListGroups(ctx context.Context, query GroupQuery) ([]Gr
 	if size < 1 || size > 100 {
 		size = 20
 	}
-	base := r.db.WithContext(ctx).Table("groups AS g").Joins("JOIN users AS owner ON owner.id = g.owner_user_id").Where("1=1")
+	// groups 是 MySQL 8.0 的保留字（窗口函数的 GROUPS 帧单位）。Table() 一旦带上别名，
+	// GORM 就把整串当原样 SQL 输出、不做引号转义，所以必须自己加反引号，否则真实 MySQL 直接语法报错。
+	// SQLite 对保留字不敏感，这个坑只有跑真实 MySQL 才会暴露。
+	// 这里后续用的是 Count/Scan 而不是 First，不依赖 Statement.Table，所以手写引号是安全的。
+	// （反过来，像 identity 那边 Table("groups") 配 First 的写法就绝不能手写引号，否则 ORDER BY 会拼错。）
+	base := r.db.WithContext(ctx).Table("`groups` AS g").Joins("JOIN users AS owner ON owner.id = g.owner_user_id").Where("1=1")
 	if query.Status != "" {
 		base = base.Where("g.status = ?", query.Status)
 	}
@@ -194,10 +199,30 @@ func (r *gormRepository) GetGroupDetail(ctx context.Context, groupID uint64) (*G
 	for _, c := range counts {
 		memberCounts[organization.MembershipStatus(c.Status)] = c.Count
 	}
-	var candidates []OwnerCandidateData
-	err := r.db.WithContext(ctx).Table("memberships AS m").Joins("JOIN users u ON u.id=m.user_id").Where("m.group_id=? AND m.member_type=? AND m.status=?", groupID, organization.MemberTypeMember, organization.MembershipStatusActive).Order("u.display_name ASC,m.id ASC").Select("m.id AS membership_id,u.id,u.username,u.display_name,u.account_type").Scan(&candidates).Error
+	// 注意：OwnerCandidateData.User 是嵌套结构体（identity.UserSummary），
+	// 直接把 []OwnerCandidateData 交给 Scan，GORM 会把它当作关联关系去解析，
+	// 报「invalid field found for struct ...'s field User: define a valid foreign key」。
+	// 所以先用扁平行结构体接住结果，再手工组装成 DTO。
+	var candidateRows []struct {
+		MembershipID uint64
+		ID           uint64
+		Username     string
+		DisplayName  string
+		AccountType  string
+	}
+	err := r.db.WithContext(ctx).Table("memberships AS m").Joins("JOIN users u ON u.id=m.user_id").Where("m.group_id=? AND m.member_type=? AND m.status=?", groupID, organization.MemberTypeMember, organization.MembershipStatusActive).Order("u.display_name ASC,m.id ASC").Select("m.id AS membership_id,u.id AS id,u.username AS username,u.display_name AS display_name,u.account_type AS account_type").Scan(&candidateRows).Error
 	if err != nil {
 		return nil, err
+	}
+	var candidates []OwnerCandidateData
+	for _, row := range candidateRows {
+		candidates = append(candidates, OwnerCandidateData{
+			MembershipID: row.MembershipID,
+			User: identity.UserSummary{
+				ID: row.ID, Username: row.Username,
+				DisplayName: row.DisplayName, AccountType: identity.AccountType(row.AccountType),
+			},
+		})
 	}
 	return &GroupDetailData{Group: GroupSummaryData{ID: group.ID, Name: group.Name, Status: group.Status, Owner: identity.UserSummary{ID: owner.ID, Username: owner.Username, DisplayName: owner.DisplayName, AccountType: owner.AccountType}, MemberCount: memberCounts[organization.MembershipStatusActive] + memberCounts[organization.MembershipStatusDisabled], Version: group.Version, CreatedAt: group.CreatedAt, UpdatedAt: group.UpdatedAt}, MemberCounts: memberCounts, OwnerCandidates: candidates}, nil
 }

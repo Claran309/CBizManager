@@ -144,10 +144,15 @@ func TestPlatformGovernanceAndInvitationLifecycle(t *testing.T) {
 	} else {
 		t.Fatal("RevealInvitation() after revoke = nil error, want INVITATION_NOT_REVEALABLE")
 	}
-	if _, err = organizationService.RevokeInvitation(ctx, *ownerSession.principal, invitation.InvitationID, organization.RevokeInvitationRequest{Version: revoked.Version}); err != nil {
-		assertIntegrationCode(t, err, apperror.CodeInvitationNotFound)
-	} else {
-		t.Fatal("RevokeInvitation() twice = nil error, want INVITATION_NOT_FOUND")
+	// 撤销是幂等的（见 platform-governance-invitations-design：撤销幂等）。
+	// 对已撤销的邀请码再次撤销应当静默成功并返回 revoked 状态，
+	// 而不是抛错——否则客户端在双击 / 弱网重试时会把正常结果当成异常。
+	reRevoked, err := organizationService.RevokeInvitation(ctx, *ownerSession.principal, invitation.InvitationID, organization.RevokeInvitationRequest{Version: revoked.Version})
+	if err != nil {
+		t.Fatalf("RevokeInvitation() twice error = %v, want 幂等成功", err)
+	}
+	if reRevoked.Status != organization.InvitationDisplayRevoked {
+		t.Fatalf("RevokeInvitation() twice status = %q, want revoked", reRevoked.Status)
 	}
 
 	// 7. 用一张新邀请码注册成员，随后把主账号交接给该成员。
@@ -182,19 +187,20 @@ func TestPlatformGovernanceAndInvitationLifecycle(t *testing.T) {
 		t.Fatalf("ChangeGroupOwner() owner = %+v", handover.Owner)
 	}
 
-	// 交接完成后：旧主账号降级为普通成员且不再能签发邀请码；新主账号升格为 owner。
-	oldOwnerSession := loginAs(t, identityService, "group-owner-one", "group-owner-password")
-	if oldOwnerSession.principal.AccountType != identity.AccountTypeMember || oldOwnerSession.principal.MemberType != "member" {
-		t.Fatalf("old owner principal = %+v", oldOwnerSession.principal)
+	// 交接完成后：旧主账号降级为普通成员并被停用（见原型「17 · 邀请码管理」与设计文档
+	// 「旧 owner 降级停用」），所以它再也登不进来，自然也不可能签发邀请码；
+	// 停用账号登录统一返回 AUTH_INVALID_CREDENTIALS，避免账号枚举。
+	if _, err = identityService.Login(ctx, identity.LoginRequest{
+		Username: "group-owner-one", Password: "group-owner-password",
+	}); err != nil {
+		assertIntegrationCode(t, err, apperror.CodeAuthInvalidCredentials)
+	} else {
+		t.Fatal("旧主账号在交接停用后仍能登录")
 	}
+	// 新主账号升格为 owner。
 	newOwnerSession := loginAs(t, identityService, "group-member-one", "member-password")
 	if newOwnerSession.principal.AccountType != identity.AccountTypeGroupOwner || newOwnerSession.principal.MemberType != "owner" {
 		t.Fatalf("new owner principal = %+v", newOwnerSession.principal)
-	}
-	if _, err := organizationService.CreateInvitation(ctx, *oldOwnerSession.principal, organization.CreateInvitationRequest{}); err != nil {
-		assertIntegrationCode(t, err, apperror.CodeForbidden)
-	} else {
-		t.Fatal("old owner CreateInvitation() = nil error, want FORBIDDEN")
 	}
 
 	// 8. 停用组：幂等重复停用不报冲突；停用后组内已有令牌立即失效。
