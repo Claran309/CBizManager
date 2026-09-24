@@ -280,3 +280,37 @@
 - **Dart 语法坑**：命名构造函数**不能**带类型参数（`factory PageResult.fromJson` 才对，
   调用处照写 `PageResult<int>.fromJson`）；sealed 基类要写成命名参数
   `const Base({required this.version});`，子类才能 `required super.version`。
+
+## Flutter Controller 约定（client/lib/features/*/application/）
+
+**每个会话级 Controller 都要有三件套**（member / dictionary / platform 都已照此实现）：
+
+1. `_loadGeneration`：`load` 开头 `++`，回来时 `if (!_disposed && gen == _loadGeneration)`
+   才允许写 state —— 先发的请求晚回来时不能覆盖后发那次的结果。
+2. `_writeTail`：写操作经 `_enqueueWrite(op)` 排队，`_writeTail.then((_) => op())`，
+   尾巴上挂空错误处理（某次写失败不能让后续写永远开不了）。返回的是本次操作的结果。
+3. `_disposed`：`build()` 里 `ref.onDispose(() { _disposed = true; _loadGeneration++; })`；
+   写操作**先取好仓储**再进队列（dispose 后碰 `ref` 会抛），每个写入点前判 `_disposed`。
+
+- **Provider 必须声明 `dependencies: [...]`**，否则 Riverpod 3 的传递式作用域不会把它
+  挂到会话作用域上（详见上一节）。
+- **Riverpod 3 的 family 没有 `FamilyNotifier`**：创建函数是 `NotifierT Function(ArgT)`，
+  arg 从 **notifier 的构造函数**进来（`MyController(this.groupId)`），`build()` 仍无参：
+  `NotifierProvider.family<C, S, int>(C.new, dependencies: [...])`。
+  用**非 autoDispose**（会话作用域整体销毁即可；autoDispose 的 family 在测试里
+  `container.read(x.notifier)` 会立即销毁，必须额外挂 listen）。
+- **409 的处理分两层**：列表页只保留 failure（让 FailurePresenter 的 `shouldRefresh`
+  驱动提示，自动刷新会冲掉翻页位置）；详情页保留 failure **并** `await load()` 重读。
+  重读顺序不能反 —— `load()` 内部会 `clearFailure`，必须**先 await load 再放回冲突原因**；
+  若重读也失败，保留那个更新的失败（`if (state.failure == null)` 才放回冲突）。
+  文案遵循「刷新不等于成功」：写操作失败后数据可能已经变了，但没变成用户要的样子。
+- **写成功后要用服务端回的新摘要替换本地那一份**（列表行 / 详情摘要），让 `version`
+  跟着涨，否则用户紧接着再操作同一条会白撞一次 409。
+- **防重复提交 = 「判空 + 置位」之间不夹 await**：`if (state.isSubmitting) return null;`
+  紧跟 `state = state.copyWith(isSubmitting: true);`，一旦中间有 await 就失效。
+- **写操作不替调用方改写 version**：不可逆操作（交接主账号）宁可让服务端 409 +
+  重读详情让用户重新确认，也不要拿旧界面的意图去盖新数据。
+- **导航用状态驱动而非回调**：创建成功把 `createdGroupId` 放进 state，页面 watch 到非空再跳，
+  跳前调 `reset()`（避免返回时重复跳转）。回调在页面卸载后触发会操作已销毁的 Context。
+- 测试夹具：`test/support/fake_platform_repository.dart` 是「排队响应 → 注入错误 →
+  默认结果」三档优先级的可编程假仓储，新模块的 Controller 测试可照这个模式写。
