@@ -13,7 +13,10 @@ void main() {
     });
 
     test('未知取值抛 FormatException 而不是静默降级', () {
-      expect(() => GroupStatus.fromWireValue('archived'), throwsFormatException);
+      expect(
+        () => GroupStatus.fromWireValue('archived'),
+        throwsFormatException,
+      );
     });
   });
 
@@ -52,7 +55,10 @@ void main() {
 
       expect(first, second);
       expect(first.hashCode, second.hashCode);
-      expect(first, isNot(PlatformGroup.fromJson(platformGroupJson(version: 4))));
+      expect(
+        first,
+        isNot(PlatformGroup.fromJson(platformGroupJson(version: 4))),
+      );
     });
 
     test('缺字段或字段类型不符时抛 FormatException', () {
@@ -80,7 +86,8 @@ void main() {
 
     test('时间字符串非法时同样抛 FormatException', () {
       expect(
-        () => PlatformGroup.fromJson(platformGroupJson(createdAt: 'not-a-date')),
+        () =>
+            PlatformGroup.fromJson(platformGroupJson(createdAt: 'not-a-date')),
         throwsFormatException,
       );
     });
@@ -101,9 +108,10 @@ void main() {
       // 「活跃成员 0 人」是个会让人以为组被清空的假数字；
       // 缺键多半意味着服务端改了字段名，此时宁可报错。
       expect(
-        () => GroupMemberCounts.fromJson(
-          const <String, Object?>{'active': 3, 'disabled': 1},
-        ),
+        () => GroupMemberCounts.fromJson(const <String, Object?>{
+          'active': 3,
+          'disabled': 1,
+        }),
         throwsFormatException,
       );
     });

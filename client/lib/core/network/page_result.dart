@@ -61,11 +61,7 @@ final class PageResult<T> {
 }
 
 /// 取出一个必填的整数字段，并校验下界。
-int _readCount(
-  Map<String, Object?> json,
-  String key, {
-  required int minimum,
-}) {
+int _readCount(Map<String, Object?> json, String key, {required int minimum}) {
   final value = json[key];
   if (value is! int || value < minimum) {
     throw FormatException('Field "$key" must be an integer >= $minimum');

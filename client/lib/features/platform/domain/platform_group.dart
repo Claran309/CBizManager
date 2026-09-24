@@ -229,7 +229,8 @@ final class PlatformGroupDetail {
       _sameList(ownerCandidates, other.ownerCandidates);
 
   @override
-  int get hashCode => Object.hash(group, memberCounts, Object.hashAll(ownerCandidates));
+  int get hashCode =>
+      Object.hash(group, memberCounts, Object.hashAll(ownerCandidates));
 }
 
 /// 平台组列表的查询条件。
@@ -372,9 +373,7 @@ List<Map<String, Object?>> _readObjectList(
   if (value is! List) {
     throw FormatException('Field "$key" must be an array');
   }
-  return <Map<String, Object?>>[
-    for (final item in value) _asObject(item, key),
-  ];
+  return <Map<String, Object?>>[for (final item in value) _asObject(item, key)];
 }
 
 /// 取出一个必填的整数字段。

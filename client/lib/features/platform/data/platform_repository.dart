@@ -39,10 +39,7 @@ abstract interface class PlatformRepository {
   );
 
   /// 交接组主账号；返回交接后的最新详情。
-  Future<PlatformGroupDetail> changeOwner(
-    int groupId,
-    OwnerChangeDraft draft,
-  );
+  Future<PlatformGroupDetail> changeOwner(int groupId, OwnerChangeDraft draft);
 }
 
 /// 走 HTTP 的平台治理仓储。

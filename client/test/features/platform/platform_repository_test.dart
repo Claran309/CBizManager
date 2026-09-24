@@ -47,15 +47,13 @@ final class RecordingPlatformAdapter implements HttpClientAdapter {
 }
 
 /// 成功信封。
-String _envelope(
-  Object? data, {
-  String requestId = 'request-1',
-}) => jsonEncode(<String, Object?>{
-  'code': 'OK',
-  'message': 'success',
-  'data': data,
-  'request_id': requestId,
-});
+String _envelope(Object? data, {String requestId = 'request-1'}) =>
+    jsonEncode(<String, Object?>{
+      'code': 'OK',
+      'message': 'success',
+      'data': data,
+      'request_id': requestId,
+    });
 
 /// 失败信封（契约里的 `ErrorApiResponse`）。
 String _errorEnvelope(
@@ -76,9 +74,7 @@ Dio _dioWith(RecordingPlatformAdapter adapter) =>
 /// 给定一个应答器，造出被测仓储。
 DioPlatformRepository _repositoryWith(
   (int, String) Function(RequestOptions options) respond,
-) => DioPlatformRepository(
-  _dioWith(RecordingPlatformAdapter(respond)),
-);
+) => DioPlatformRepository(_dioWith(RecordingPlatformAdapter(respond)));
 
 const _createDraft = CreateGroupDraft(
   name: '钢材一组',
@@ -182,10 +178,8 @@ void main() {
 
   test('启停组用 PATCH 提交状态与版本号', () async {
     final adapter = RecordingPlatformAdapter(
-      (_) => (
-        200,
-        _envelope(platformGroupJson(status: 'disabled', version: 4)),
-      ),
+      (_) =>
+          (200, _envelope(platformGroupJson(status: 'disabled', version: 4))),
     );
 
     final group = await DioPlatformRepository(
@@ -260,7 +254,10 @@ void main() {
       'temporary_password': 'secret123',
       'version': 4,
     });
-    expect((put.data! as Map<String, Object?>).containsKey('membership_id'), isFalse);
+    expect(
+      (put.data! as Map<String, Object?>).containsKey('membership_id'),
+      isFalse,
+    );
   });
 
   test('交接成功后重读详情，返回的字面不是半截的写响应', () async {
@@ -381,10 +378,7 @@ void main() {
           200,
           _envelope(platformGroupDetailJson()),
         ),
-        'GET' => (
-          200,
-          _envelope(platformGroupPageJson()),
-        ),
+        'GET' => (200, _envelope(platformGroupPageJson())),
         'POST' => (201, _envelope(platformGroupCreatedJson())),
         'PATCH' => (200, _envelope(platformGroupJson(status: 'disabled'))),
         'PUT' => (200, _envelope(platformOwnerChangedJson())),
