@@ -317,6 +317,16 @@
   跳前调 `reset()`（避免返回时重复跳转）。回调在页面卸载后触发会操作已销毁的 Context。
 - 测试夹具：`test/support/fake_platform_repository.dart` 是「排队响应 → 注入错误 →
   默认结果」三档优先级的可编程假仓储，新模块的 Controller 测试可照这个模式写。
+- **敏感明文（邀请码）只活内存**：唯一承载字段是 state 的 `visibleSecret`；查看前先清旧
+  （一次只留一份）、撤销成功 / 撤销冲突 / 刷新后列表里不再 active / 列表找不到 / `onDispose`
+  都清。`InvitationSecret.toString` 主动隐藏 code，否则断言失败会把明文打进测试输出与堆栈。
+- **「该操作需要联网」这类文案归展示层**（`FailurePresenter` 按失败类型补），仓储层只产出
+  `NetworkFailure` 类型 —— 仓储层测试断言 `throwsA(isA<NetworkFailure>())` 就够，别断言文案。
+- **Dart 集合的可选字段用 null-aware 元素**：`{'k': ?maybeNull}` 与
+  `if (x != null) 'k': x` 等价，但 lint `use_null_aware_elements` 只接受前者；
+  「判空的是 key 变量、值表达式本身非空」（如 `'status': status.wireValue`）**不能**换 `?`，
+  这种情况保持 `if (x != null)` 写法。发可选字段的空 body 要发 `{}` 而非 null（服务端
+  `ShouldBindJSON` 在空 body 上报 EOF）。
 
 ## Flutter 页面层约定（client/lib/features/*/presentation/）
 
