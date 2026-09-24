@@ -50,6 +50,53 @@ flutter analyze
 flutter test
 ```
 
+## 真实后端纵向验证
+
+`integration_test/real_backend_role_flow_test.dart` 会连一个**真实 Go 后端**，
+把「平台管理员登录/改密 → 建组 → owner 登录/改密 → 创建并再次查看邀请码 →
+member 注册/登录 → owner 替换权限 → member 读字典 → 换 owner → 旧 owner 失效」
+整条流程对真服务端跑一遍，验证客户端数据层对真实后端契约（路径、请求体、
+错误码映射、响应解析）的正确性。
+
+### 前置：启动后端与数据库
+
+先用 Docker 拉起 MySQL（首次）：
+
+```powershell
+docker context show
+docker ps -a --filter "name=^/MySQL$"
+docker run --name MySQL -e MYSQL_ROOT_PASSWORD=<本地密码> -e MYSQL_DATABASE=cbizdocsmanager -p 3306:3306 -d mysql:8
+```
+
+再以本地环境变量启动 API（变量名见 `backend/pkg/config/config.go` 的
+`bindEnvironment`；`INVITATION_ENCRYPTION_KEY` 必须是 Base64 编码的 32 字节密钥）：
+
+```powershell
+$env:MYSQL_DSN = "<root:<密码>@tcp(127.0.0.1:3306)/cbizdocsmanager?parseTime=true&charset=utf8mb4>"
+$env:JWT_SECRET = "<至少 32 字节的密钥>"
+$env:INVITATION_ENCRYPTION_KEY = "<Base64 32 字节>"
+$env:BOOTSTRAP_ADMIN_USERNAME = "<初始管理员名>"
+$env:BOOTSTRAP_ADMIN_PASSWORD = "<初始管理员密码>"
+cd backend; go run ./cmd/api
+```
+
+就绪探测：`Invoke-RestMethod http://127.0.0.1:8080/health/ready` 应返回
+`status=ok`、`mysql=up`（Redis 降级 `disabled` 属正常，不阻塞核心 CRUD）。
+
+### 运行纵向验证
+
+```powershell
+flutter test integration_test/real_backend_role_flow_test.dart --dart-define=CBIZ_API_BASE_URL=http://127.0.0.1:8080
+```
+
+缺 `CBIZ_API_BASE_URL` 时测试整体 skip，不会误连生产。bootstrap 管理员凭据可用
+`CBIZ_BOOTSTRAP_ADMIN_USERNAME` / `CBIZ_BOOTSTRAP_ADMIN_PASSWORD` 覆盖（缺省回退
+到后端 development 默认值）；组主账号与业务员的账号密码由测试过程自行生成，
+测试数据只落在本地测试库。跑完按原状态恢复 Docker 容器。
+
+> 注意：以上命令里的 `<...>` 是占位符，真实值一律通过本地环境变量 / 未跟踪
+> 文件注入，**不写进仓库**。
+
 ## 三平台构建
 
 ```powershell
