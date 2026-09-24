@@ -1,8 +1,10 @@
 import 'package:c_biz_docs_manager/app/app.dart';
 import 'package:c_biz_docs_manager/app/router.dart';
+import 'package:c_biz_docs_manager/app/session_scope.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_controller.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -72,6 +74,12 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          // 这里刻意照着 bootstrap 的方式装配：一旦进入已登录态，
+          // 应用外壳就会建立会话作用域，而作用域需要应用级的 Dio。
+          // 不提供它，就说明"真实装配缺少应用级依赖"，应当当场失败。
+          dioProvider.overrideWithValue(
+            Dio(BaseOptions(baseUrl: 'https://api.example.test')),
+          ),
           authRepositoryProvider.overrideWithValue(
             StaticAuthRepository(ownerSession()),
           ),

@@ -12,6 +12,10 @@ final dictionaryRepositoryProvider = Provider<DictionaryRepository>((Ref ref) {
 final dictionaryControllerProvider =
     NotifierProvider<DictionaryController, DictionaryState>(
       DictionaryController.new,
+      // 同 MemberController：显式声明依赖，让 Riverpod 的传递式作用域把本
+      // Controller 挂到覆盖了仓储的那个会话作用域里，而不是挂在根容器
+      // 被所有账号共享（那会导致换组后还能看到上一个组的字典）。
+      dependencies: [dictionaryRepositoryProvider],
     );
 
 final class DictionaryState {
@@ -49,27 +53,44 @@ final class DictionaryController extends Notifier<DictionaryState> {
   var _loadGeneration = 0;
   Future<void> _writeTail = Future<void>.value();
 
+  /// 会话作用域是否已销毁。
+  ///
+  /// 理由与 MemberController 一致：切账号瞬间可能有请求在途，
+  /// 让它把上一个组的字典写进新会话的界面，比抛个错还糟糕。
+  var _disposed = false;
+
   DictionaryRepository get _repository =>
       ref.read(dictionaryRepositoryProvider);
 
+  /// 在途结果是否还允许写回状态。
+  bool _isCurrent(int generation) =>
+      !_disposed && generation == _loadGeneration;
+
   @override
-  DictionaryState build() => const DictionaryState();
+  DictionaryState build() {
+    ref.onDispose(() {
+      _disposed = true;
+      _loadGeneration++;
+    });
+    return const DictionaryState();
+  }
 
   Future<void> load(DictionaryQuery query) async {
     final generation = ++_loadGeneration;
+    if (_disposed) return;
     _query = query;
     state = state.copyWith(isLoading: true, clearFailure: true);
     try {
       final items = await _repository.list(query);
-      if (generation == _loadGeneration) {
+      if (_isCurrent(generation)) {
         state = state.copyWith(items: items, clearFailure: true);
       }
     } on AppFailure catch (failure) {
-      if (generation == _loadGeneration) {
+      if (_isCurrent(generation)) {
         state = state.copyWith(failure: failure);
       }
     } finally {
-      if (generation == _loadGeneration) {
+      if (_isCurrent(generation)) {
         state = state.copyWith(isLoading: false);
       }
     }
@@ -81,14 +102,18 @@ final class DictionaryController extends Notifier<DictionaryState> {
   }
 
   Future<void> create(DictionaryDraft draft) async {
+    // 先取好仓储：写操作是排队的，真正执行时作用域可能已经销毁，
+    // 那时再碰 ref 会抛错。下同。
+    final repository = _repository;
     await _enqueueWrite(
-      () => _write(() => _repository.create(draft), append: true),
+      () => _write(() => repository.create(draft), append: true),
     );
   }
 
   Future<void> update(int id, DictionaryDraft draft, int version) async {
+    final repository = _repository;
     await _enqueueWrite(
-      () => _write(() => _repository.update(id, draft, version)),
+      () => _write(() => repository.update(id, draft, version)),
     );
   }
 
@@ -97,8 +122,9 @@ final class DictionaryController extends Notifier<DictionaryState> {
     DictionaryStatus status,
     int version,
   ) async {
+    final repository = _repository;
     await _enqueueWrite(
-      () => _write(() => _repository.changeStatus(id, status, version)),
+      () => _write(() => repository.changeStatus(id, status, version)),
     );
   }
 
@@ -115,9 +141,11 @@ final class DictionaryController extends Notifier<DictionaryState> {
     Future<DictionaryEntry> Function() operation, {
     bool append = false,
   }) async {
+    if (_disposed) return;
     state = state.copyWith(isWriting: true, clearFailure: true);
     try {
       final updated = await operation();
+      if (_disposed) return;
       final query = _query;
       var items = state.items;
       if (query == null || _matches(updated, query)) {
@@ -132,9 +160,12 @@ final class DictionaryController extends Notifier<DictionaryState> {
       }
       state = state.copyWith(items: items, clearFailure: true);
     } on AppFailure catch (failure) {
+      if (_disposed) return;
       state = state.copyWith(failure: failure);
     } finally {
-      state = state.copyWith(isWriting: false);
+      if (!_disposed) {
+        state = state.copyWith(isWriting: false);
+      }
     }
   }
 }

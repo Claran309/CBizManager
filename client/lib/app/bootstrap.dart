@@ -1,4 +1,5 @@
 import 'package:c_biz_docs_manager/app/app.dart';
+import 'package:c_biz_docs_manager/app/session_scope.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_controller.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
@@ -40,6 +41,10 @@ Future<void> bootstrap() async {
   runApp(
     ProviderScope(
       overrides: [
+        // 应用级依赖在这里落地一次：会话作用域内的业务 Repository
+        // 会复用同一个 Dio（它已被 ApiClient 装上鉴权拦截器），
+        // 而不是各自再造一个没有令牌的客户端。
+        dioProvider.overrideWithValue(dio),
         authRepositoryProvider.overrideWithValue(authRepository),
         authSessionInvalidatorProvider.overrideWithValue(invalidator),
       ],
