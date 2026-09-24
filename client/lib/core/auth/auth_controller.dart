@@ -84,11 +84,39 @@ final class AuthController extends Notifier<AuthState> {
     }
   }
 
+  /// 登录并建立会话。
+  ///
+  /// **失败时把详情写进状态、把异常吞掉**，而不是抛给页面：页面在 `await`
+  /// 之后读一次状态就能拿到失败原因，不需要在 UI 层再包一层 `try/catch` ——
+  /// 那一层迟早会有人忘了写，而「点了登录却什么也没提示」是最难受的一种坏。
+  /// 「本次是否失败」不用另开返回值：开工时会重建一个不带 failure 的状态，
+  /// 所以 `await` 之后读到的非空 `failure` 一定属于这一次。
+  ///
+  /// 失败后落在 [AuthPhase.unauthenticated]，**不是**保留原来的 phase。
+  /// 与 [changePassword] 不同，这里没有「必须留住已有会话」的包袱：
+  /// 登录的语义就是「试图建立会话」，没建立起来就一定是未登录。
+  /// 保留 `restoring` 尤其危险 —— 守卫只允许 `restoring` 停在 `/splash`，
+  /// 用户会被永久留在启动页上。
   Future<void> login(String username, String password) async {
-    final session = await ref
-        .read(authRepositoryProvider)
-        .login(username, password);
-    state = AuthState(AuthPhase.authenticated, session: session);
+    // 预填的用户名要留住：一次输错密码不该顺手把登录框里的账号也抹掉。
+    final prefill = state.loginPrefill;
+    state = AuthState(
+      AuthPhase.unauthenticated,
+      isSubmitting: true,
+      loginPrefill: prefill,
+    );
+    try {
+      final session = await ref
+          .read(authRepositoryProvider)
+          .login(username, password);
+      state = AuthState(AuthPhase.authenticated, session: session);
+    } on AppFailure catch (failure) {
+      state = AuthState(
+        AuthPhase.unauthenticated,
+        failure: failure,
+        loginPrefill: prefill,
+      );
+    }
   }
 
   /// 用邀请码注册组内子账号。

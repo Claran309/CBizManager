@@ -1,29 +1,17 @@
 import 'dart:async';
 
+import 'package:c_biz_docs_manager/core/auth/auth_controller.dart';
 import 'package:c_biz_docs_manager/core/error/app_failure.dart';
 import 'package:c_biz_docs_manager/core/presentation/async_state_view.dart';
 import 'package:c_biz_docs_manager/core/presentation/failure_presenter.dart';
 import 'package:c_biz_docs_manager/core/presentation/responsive_scaffold.dart';
+import 'package:c_biz_docs_manager/features/home/presentation/tenant_shell.dart';
 import 'package:c_biz_docs_manager/features/invitations/application/invitation_controller.dart';
 import 'package:c_biz_docs_manager/features/invitations/domain/invitation.dart';
 import 'package:c_biz_docs_manager/features/invitations/presentation/invitation_secret_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-/// 租户侧导航目的地。
-///
-/// 这里**只声明「邀请码」一项**：`ResponsiveScaffold` 在少于两项时不渲染导航
-/// （见其 build 的说明），本页于是退化成「AppBar + 内容」，返回首页由 AppBar 上的
-/// 按钮提供。成员 / 字典 / 首页各自属于哪个导航组，要到租户功能壳统一落地时才定得
-/// 下来；在这里先塞一个四项列表，只会把那份定义分裂成两处，将来必然对不上。
-const List<AppDestination> _destinations = <AppDestination>[
-  AppDestination(
-    label: '邀请码',
-    icon: Icons.vpn_key_outlined,
-    route: '/invitations',
-  ),
-];
 
 /// 邀请码状态的界面文案。
 String invitationStatusLabel(InvitationStatus status) => switch (status) {
@@ -179,7 +167,10 @@ final class _InvitationsPageState extends ConsumerState<InvitationsPage> {
 
     return ResponsiveScaffold(
       title: '邀请码',
-      destinations: _destinations,
+      // 导航项随身份裁剪（本页只有组主账号进得来，见 tenantDestinations）。
+      destinations: tenantDestinations(
+        ref.watch(authControllerProvider).session?.profile,
+      ),
       currentRoute: '/invitations',
       actions: <Widget>[
         IconButton(

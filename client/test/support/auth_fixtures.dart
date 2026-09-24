@@ -12,6 +12,7 @@ Map<String, Object?> _mePayload({
   required int userId,
   required String username,
   required String accountType,
+  String? displayName,
   Object? group,
   Object? memberType,
   bool mustChangePassword = false,
@@ -20,7 +21,9 @@ Map<String, Object?> _mePayload({
   'user': <String, Object?>{
     'id': userId,
     'username': username,
-    'display_name': username,
+    // 默认与账号同名，省得每个用例都要写两遍；需要区分「姓名」与「账号」
+    // （例如首页把两者分两行显示）时再显式传。
+    'display_name': displayName ?? username,
     'account_type': accountType,
   },
   'group': group,
@@ -34,12 +37,14 @@ AuthProfile ownerProfile({
   bool mustChangePassword = false,
   int userId = 11,
   String username = 'owner',
+  String? displayName,
   int groupId = 7,
   String groupName = 'Finance',
 }) => AuthProfile.fromJson(
   _mePayload(
     userId: userId,
     username: username,
+    displayName: displayName,
     accountType: 'group_owner',
     group: <String, Object?>{'id': groupId, 'name': groupName},
     memberType: 'owner',
@@ -53,12 +58,14 @@ AuthProfile memberProfile({
   List<String> permissionCodes = const <String>[],
   int userId = 22,
   String username = 'sales',
+  String? displayName,
   int groupId = 7,
   String groupName = 'Finance',
 }) => AuthProfile.fromJson(
   _mePayload(
     userId: userId,
     username: username,
+    displayName: displayName,
     accountType: 'member',
     group: <String, Object?>{'id': groupId, 'name': groupName},
     memberType: 'member',
@@ -86,6 +93,7 @@ AuthSession ownerSession({
   bool mustChangePassword = false,
   String accessToken = 'access',
   int userId = 11,
+  String? displayName,
   int groupId = 7,
   String groupName = 'Finance',
 }) => AuthSession(
@@ -93,6 +101,7 @@ AuthSession ownerSession({
   profile: ownerProfile(
     mustChangePassword: mustChangePassword,
     userId: userId,
+    displayName: displayName,
     groupId: groupId,
     groupName: groupName,
   ),
@@ -105,6 +114,7 @@ AuthSession memberSession({
   String accessToken = 'access',
   int userId = 22,
   String username = 'sales',
+  String? displayName,
   int groupId = 7,
   String groupName = 'Finance',
 }) => AuthSession(
@@ -114,6 +124,7 @@ AuthSession memberSession({
     permissionCodes: permissionCodes,
     userId: userId,
     username: username,
+    displayName: displayName,
     groupId: groupId,
     groupName: groupName,
   ),

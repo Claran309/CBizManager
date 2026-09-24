@@ -4,24 +4,12 @@ import 'package:c_biz_docs_manager/core/error/app_failure.dart';
 import 'package:c_biz_docs_manager/core/presentation/async_state_view.dart';
 import 'package:c_biz_docs_manager/core/presentation/failure_presenter.dart';
 import 'package:c_biz_docs_manager/core/presentation/responsive_scaffold.dart';
+import 'package:c_biz_docs_manager/features/home/presentation/tenant_shell.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/domain/member.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-/// 租户侧导航目的地。
-///
-/// 只声明「成员」一项：`ResponsiveScaffold` 在少于两项时不渲染导航，
-/// 页面退化成 AppBar + 内容。首页 / 邀请码 / 字典的导航归属留到租户功能壳
-/// 统一落地时再定，免得同一份定义分裂成两处。
-///
-/// 公开而不是私有：权限替换页是成员功能的下级页面，它也要拿这份定义 ——
-/// `ResponsiveScaffold` 靠「最长路径前缀」把 `/members/7/permissions`
-/// 也算进「成员」这一项。各页各写一份，将来加了第二项必然对不上。
-const List<AppDestination> memberDestinations = <AppDestination>[
-  AppDestination(label: '成员', icon: Icons.group_outlined, route: '/members'),
-];
 
 /// 成员状态的界面文案。
 String memberStatusLabel(MemberStatus status) => switch (status) {
@@ -195,7 +183,9 @@ final class _MembersPageState extends ConsumerState<MembersPage> {
 
     return ResponsiveScaffold(
       title: '成员',
-      destinations: memberDestinations,
+      // 导航按身份裁剪：普通成员看到的壳里不会出现「邀请码」这种
+      // 点了就被守卫弹回来的假入口。见 tenantDestinations。
+      destinations: tenantDestinations(profile),
       currentRoute: '/members',
       actions: <Widget>[
         IconButton(

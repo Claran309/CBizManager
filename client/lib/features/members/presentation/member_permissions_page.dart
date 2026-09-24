@@ -1,10 +1,11 @@
+import 'package:c_biz_docs_manager/core/auth/auth_controller.dart';
 import 'package:c_biz_docs_manager/core/error/app_failure.dart';
 import 'package:c_biz_docs_manager/core/presentation/async_state_view.dart';
 import 'package:c_biz_docs_manager/core/presentation/failure_presenter.dart';
 import 'package:c_biz_docs_manager/core/presentation/responsive_scaffold.dart';
+import 'package:c_biz_docs_manager/features/home/presentation/tenant_shell.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/domain/member.dart';
-import 'package:c_biz_docs_manager/features/members/presentation/members_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -152,6 +153,9 @@ final class _MemberPermissionsPageState
       });
     });
 
+    // 导航项随身份裁剪（普通成员的壳里不该出现「邀请码」）。
+    final profile = ref.watch(authControllerProvider).session?.profile;
+
     final member = _memberOf(state.items);
     final draft = _draft;
     final hasChanges =
@@ -161,7 +165,7 @@ final class _MemberPermissionsPageState
 
     return ResponsiveScaffold(
       title: member == null ? '成员权限' : '成员权限 · ${member.displayName}',
-      destinations: memberDestinations,
+      destinations: tenantDestinations(profile),
       // 权限页是成员功能的下级页面，让「成员」这一项保持高亮
       // （ResponsiveScaffold 会按最长路径前缀匹配）。
       currentRoute: '/members/${widget.membershipId}/permissions',

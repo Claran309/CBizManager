@@ -1,4 +1,6 @@
 import 'package:c_biz_docs_manager/core/presentation/failure_presenter.dart';
+import 'package:c_biz_docs_manager/core/presentation/form_feedback.dart';
+import 'package:c_biz_docs_manager/core/presentation/password_field.dart';
 import 'package:c_biz_docs_manager/core/presentation/responsive_scaffold.dart';
 import 'package:c_biz_docs_manager/features/platform/application/create_group_controller.dart';
 import 'package:c_biz_docs_manager/features/platform/domain/platform_group.dart';
@@ -19,20 +21,23 @@ final class CreateGroupPage extends ConsumerStatefulWidget {
   ConsumerState<CreateGroupPage> createState() => _CreateGroupPageState();
 }
 
-final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
+final class _CreateGroupPageState extends ConsumerState<CreateGroupPage>
+    with ServerFieldErrorsMixin<CreateGroupPage> {
   /// 本页负责渲染的字段名（与契约字段名一致）。
   ///
   /// 服务端 `ValidationFailure.fields` 的键就是 snake_case 的契约字段名，
   /// 所以这张表同时充当「这条字段错误我能不能展示」的判据：不在表里的
   /// （比如 `body`）说明本页无处安放，得退回统一提示条。
-  static const Set<String> _fieldNames = <String>{
+  @override
+  Set<String> get formFieldNames => const <String>{
     'name',
     'owner_username',
     'owner_display_name',
     'owner_temporary_password',
   };
 
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  @override
+  final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _ownerUsernameController =
@@ -41,14 +46,25 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
       TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
-  bool _obscurePassword = true;
-
-  /// 服务端返回的逐字段错误。
+  /// 初始密码的校验：服务端错误优先，其次才是本地规则。
   ///
-  /// 它不是常驻状态：用户一改动某个字段，该字段上的服务端错误立刻清掉
-  /// （见 [_clearServerError]）—— 否则「组名已存在」会一直挂在那里，
-  /// 哪怕用户已经把组名改成了别的。
-  Map<String, String> _serverFieldErrors = const <String, String>{};
+  /// 长度下限 8 照抄契约（`minLength: 8`）。本地先拦一道，用户不必为一个
+  /// 明确可知的规则白等一次往返；而服务端错误优先，是因为它知道更多
+  /// （比如「与历史密码重复」这种本地无法判断的约束）。
+  String? _validatePassword(String? value) {
+    final required = validateRequired(
+      'owner_temporary_password',
+      value,
+      '请输入初始密码',
+    );
+    if (required != null) return required;
+    return validateMinLength(
+      'owner_temporary_password',
+      value,
+      8,
+      '初始密码不少于 8 位',
+    );
+  }
 
   @override
   void dispose() {
@@ -60,42 +76,10 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
     super.dispose();
   }
 
-  String? _validateRequired(String field, String? value, String message) {
-    final serverError = _serverFieldErrors[field];
-    if (serverError != null) return serverError;
-    if (value == null || value.trim().isEmpty) return message;
-    return null;
-  }
-
-  /// 初始密码的校验：服务端错误优先，其次才是本地规则。
-  ///
-  /// 长度下限 8 照抄契约（`minLength: 8`）。本地先拦一道，用户不必为一个
-  /// 明确可知的规则白等一次往返；而服务端错误优先，是因为它知道更多
-  /// （比如「与历史密码重复」这种本地无法判断的约束）。
-  String? _validatePassword(String? value) {
-    final serverError = _serverFieldErrors['owner_temporary_password'];
-    if (serverError != null) return serverError;
-    final password = value ?? '';
-    if (password.isEmpty) return '请输入初始密码';
-    if (password.length < 8) return '初始密码不少于 8 位';
-    return null;
-  }
-
-  void _clearServerError(String field) {
-    if (!_serverFieldErrors.containsKey(field)) return;
-    setState(() {
-      // 复制一份再删，避免直接改动上一份状态里的 Map（状态对象应当是不可变的）。
-      _serverFieldErrors = Map<String, String>.of(_serverFieldErrors)
-        ..remove(field);
-    });
-  }
-
   Future<void> _submit() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(formKey.currentState?.validate() ?? false)) return;
     // 表单内容变了，上一轮的服务端错误一律作废。
-    if (_serverFieldErrors.isNotEmpty) {
-      setState(() => _serverFieldErrors = const <String, String>{});
-    }
+    clearAllServerErrors();
 
     final result = await ref
         .read(createGroupControllerProvider.notifier)
@@ -115,22 +99,9 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
     if (failure == null) return;
 
     final presentation = FailurePresenter.present(failure);
-    final fieldErrors = presentation.fieldErrors;
-    final canPlaceAllErrors =
-        fieldErrors.isNotEmpty && fieldErrors.keys.every(_fieldNames.contains);
-    if (canPlaceAllErrors) {
-      // 每条错误都挂到了对应输入框下方，就不再弹提示条说第二遍。
-      setState(() => _serverFieldErrors = fieldErrors);
-      _formKey.currentState?.validate();
-      return;
-    }
-    _showMessage(presentation.message);
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    // 每条错误都挂到了对应输入框下方，就不再弹提示条说第二遍。
+    if (presentFieldErrors(presentation)) return;
+    showMessage(presentation.message);
   }
 
   @override
@@ -168,7 +139,7 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
     final theme = Theme.of(context);
 
     return Form(
-      key: _formKey,
+      key: formKey,
       // 用户碰过某个字段之后就一直校验它：比每次提交才报错更及时，
       // 也不会在用户还没开始填的时候就满屏红字。
       autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -191,8 +162,8 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (String? value) =>
-                        _validateRequired('name', value, '请输入业务组名称'),
-                    onChanged: (_) => _clearServerError('name'),
+                        validateRequired('name', value, '请输入业务组名称'),
+                    onChanged: (_) => clearServerError('name'),
                   ),
                   const SizedBox(height: 24),
                   Text('组主账号', style: theme.textTheme.titleMedium),
@@ -209,8 +180,8 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (String? value) =>
-                        _validateRequired('owner_username', value, '请输入登录账号'),
-                    onChanged: (_) => _clearServerError('owner_username'),
+                        validateRequired('owner_username', value, '请输入登录账号'),
+                    onChanged: (_) => clearServerError('owner_username'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -220,32 +191,17 @@ final class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (String? value) =>
-                        _validateRequired('owner_display_name', value, '请输入姓名'),
-                    onChanged: (_) => _clearServerError('owner_display_name'),
+                        validateRequired('owner_display_name', value, '请输入姓名'),
+                    onChanged: (_) => clearServerError('owner_display_name'),
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
+                  PasswordField(
                     controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: '初始密码',
-                      helperText: '不少于 8 位，交付后请要求本人尽快修改',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        tooltip: _obscurePassword ? '显示密码' : '隐藏密码',
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
-                        ),
-                      ),
-                    ),
+                    label: '初始密码',
+                    helperText: '不少于 8 位，交付后请要求本人尽快修改',
                     validator: _validatePassword,
                     onChanged: (_) =>
-                        _clearServerError('owner_temporary_password'),
+                        clearServerError('owner_temporary_password'),
                   ),
                   const SizedBox(height: 24),
                   FilledButton(

@@ -16,6 +16,7 @@ final class FakeControllerAuthRepository implements AuthRepository {
     profile: ownerProfile(),
   );
   Object? restoreError;
+  Object? loginError;
   Object? logoutError;
   Object? registerError;
   Object? changePasswordError;
@@ -32,9 +33,20 @@ final class FakeControllerAuthRepository implements AuthRepository {
   /// 非空时让 [register] 挂起，用来观察提交中的状态。
   Completer<void>? registerGate;
 
+  /// 非空时让 [login] 挂起，用来观察提交中的状态。
+  Completer<void>? loginGate;
+
   @override
   Future<AuthSession> login(String username, String password) async {
     loginCalls++;
+    final gate = loginGate;
+    if (gate != null) {
+      await gate.future;
+    }
+    final error = loginError;
+    if (error != null) {
+      throw error;
+    }
     return session;
   }
 
@@ -162,6 +174,84 @@ void main() {
       container.read(authControllerProvider).phase,
       AuthPhase.unauthenticated,
     );
+  });
+
+  test('登录成功建立会话', () async {
+    final repository = FakeControllerAuthRepository();
+    final container = createContainer(repository);
+    final controller = container.read(authControllerProvider.notifier);
+
+    await controller.login('owner', 'password123');
+
+    expect(repository.loginCalls, 1);
+    final state = container.read(authControllerProvider);
+    expect(state.phase, AuthPhase.authenticated);
+    expect(state.session?.profile.user.username, 'owner');
+    expect(state.isSubmitting, isFalse);
+    expect(state.failure, isNull);
+  });
+
+  test('登录进行中标记提交态，页面据此禁用按钮', () async {
+    final repository = FakeControllerAuthRepository()
+      ..loginGate = Completer<void>();
+    final container = createContainer(repository);
+    final controller = container.read(authControllerProvider.notifier);
+
+    final pending = controller.login('owner', 'password123');
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(authControllerProvider).isSubmitting, isTrue);
+
+    repository.loginGate!.complete();
+    await pending;
+    expect(container.read(authControllerProvider).isSubmitting, isFalse);
+  });
+
+  test('登录失败把详情写进状态、保持未登录，而且**不抛给调用方**', () async {
+    final repository = FakeControllerAuthRepository()
+      ..loginError = const UnauthenticatedFailure('账号或密码不正确');
+    final container = createContainer(repository);
+
+    // 与改密同一套写法：失败不靠异常传递，页面在 await 之后读一次状态即可。
+    // 让异常逃到 UI 层，迟早会有某个页面忘了 try/catch，
+    // 结局就是「点了登录什么也没发生」。
+    await container.read(authControllerProvider.notifier).login('owner', 'bad');
+
+    final state = container.read(authControllerProvider);
+    expect(state.phase, AuthPhase.unauthenticated);
+    expect(state.session, isNull);
+    expect(state.failure, isA<UnauthenticatedFailure>());
+    expect(state.isSubmitting, isFalse);
+  });
+
+  test('登录失败不抹掉注册带回来的用户名预填', () async {
+    final repository = FakeControllerAuthRepository()
+      ..loginError = const UnauthenticatedFailure('账号或密码不正确');
+    final container = createContainer(repository);
+    final controller = container.read(authControllerProvider.notifier);
+
+    await controller.register(_draft);
+    await controller.login('sales', 'wrong');
+
+    // 一次输错密码不该顺手把登录框里的账号也抹掉。
+    expect(container.read(authControllerProvider).loginPrefill, 'sales');
+  });
+
+  test('重新登录会清掉上一次的失败详情', () async {
+    final repository = FakeControllerAuthRepository()
+      ..loginError = const UnauthenticatedFailure('账号或密码不正确');
+    final container = createContainer(repository);
+    final controller = container.read(authControllerProvider.notifier);
+
+    await controller.login('owner', 'bad');
+    expect(container.read(authControllerProvider).failure, isNotNull);
+
+    repository.loginError = null;
+    await controller.login('owner', 'password123');
+
+    // 失败的提示不能跟着用户进到下一个页面去。
+    final state = container.read(authControllerProvider);
+    expect(state.failure, isNull);
+    expect(state.phase, AuthPhase.authenticated);
   });
 
   test('注册成功保持未登录，并把用户名预填给登录页', () async {

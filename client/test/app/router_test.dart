@@ -5,6 +5,7 @@ import 'package:c_biz_docs_manager/core/auth/auth_controller.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` 在 Riverpod 3 里由 misc.dart 导出，主入口只给常用的那一组。
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -12,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import '../support/auth_fixtures.dart';
+import '../support/real_router_harness.dart';
 
 /// 只关心会话本身的路由守卫替身；注册与改密不属于本文件的关注点。
 final class StaticAuthRepository implements AuthRepository {
@@ -554,7 +556,8 @@ void main() {
     ) async {
       await pumpApp(tester, StaticAuthRepository(ownerSession()));
 
-      expect(find.text('首页'), findsOneWidget);
+      // 租户壳的导航项也叫「首页」，全树搜索会命中两次；限定在 AppBar 标题里找。
+      expectTenantHome();
     });
 
     testWidgets('未登录打开受保护地址会被真实路由器拦回登录页', (WidgetTester tester) async {
@@ -563,12 +566,14 @@ void main() {
         const StaticAuthRepository.signedOut(),
       );
 
-      expect(find.text('登录'), findsOneWidget);
+      // 登录页上「登录」既是标题也是提交按钮，限定到按钮上。
+      expect(find.widgetWithText(FilledButton, '登录'), findsOneWidget);
 
       container.read(routerProvider).go('/members');
       await tester.pumpAndSettle();
 
-      expect(find.text('登录'), findsOneWidget);
+      // 登录页上「登录」既是标题也是提交按钮，限定到按钮上。
+      expect(find.widgetWithText(FilledButton, '登录'), findsOneWidget);
     });
 
     testWidgets('平台管理员打开租户地址会被真实路由器送回平台列表', (WidgetTester tester) async {
@@ -594,7 +599,8 @@ void main() {
       container.read(routerProvider).go('/platform/groups');
       await tester.pumpAndSettle();
 
-      expect(find.text('首页'), findsOneWidget);
+      // 租户壳的导航项也叫「首页」，全树搜索会命中两次；限定在 AppBar 标题里找。
+      expectTenantHome();
     });
 
     testWidgets('普通成员打开成员页会被真实路由器送回租户首页', (WidgetTester tester) async {
@@ -606,7 +612,8 @@ void main() {
       container.read(routerProvider).go('/members');
       await tester.pumpAndSettle();
 
-      expect(find.text('首页'), findsOneWidget);
+      // 租户壳的导航项也叫「首页」，全树搜索会命中两次；限定在 AppBar 标题里找。
+      expectTenantHome();
     });
   });
 }

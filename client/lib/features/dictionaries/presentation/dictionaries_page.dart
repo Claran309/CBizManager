@@ -6,22 +6,10 @@ import 'package:c_biz_docs_manager/core/presentation/responsive_scaffold.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_controller.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/domain/dictionary_entry.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/presentation/dictionary_editor_dialog.dart';
+import 'package:c_biz_docs_manager/features/home/presentation/tenant_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
-/// 租户侧导航目的地。
-///
-/// 与成员页同样的理由只声明本页一项：`ResponsiveScaffold` 在少于两项时不渲染
-/// 导航，页面退化成 AppBar + 内容。租户功能壳的导航归属留到统一落地时再定，
-/// 免得同一份定义分裂成两处。
-const List<AppDestination> _dictionaryDestinations = <AppDestination>[
-  AppDestination(
-    label: '字典',
-    icon: Icons.menu_book_outlined,
-    route: '/dictionaries',
-  ),
-];
 
 /// 字典状态的界面文案。
 String dictionaryStatusLabel(DictionaryStatus status) => switch (status) {
@@ -293,7 +281,8 @@ final class _DictionariesPageState extends ConsumerState<DictionariesPage> {
 
     return ResponsiveScaffold(
       title: '辅助字典',
-      destinations: _dictionaryDestinations,
+      // 导航项随身份裁剪（见 tenantDestinations）。
+      destinations: tenantDestinations(profile),
       currentRoute: '/dictionaries',
       actions: <Widget>[
         // 写入口整体隐藏而不是点了报 403：只读用户看到的就是一个纯只读页面。
