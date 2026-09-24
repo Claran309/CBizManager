@@ -500,6 +500,15 @@
   因为租户壳的导航项也叫「首页」，全树搜索会命中两次）与
   `expectDestination(label, visible: …)`（同时查 `NavigationRail` 与 `NavigationBar` 子树，
   断言就不依赖窗口宽度）。
+- **纵向闭环测试用 `HttpClientAdapter` 假后端，别 mock 单个 Repository**
+  （`test/support/fake_backend.dart`）：写一个内存状态机塞进真实 Dio，复刻
+  `bootstrap.dart` 的装配（Dio + ApiClient 拦截器 + DefaultAuthRepository + 内存凭据库），
+  再 pump `CBizDocsApp`。这样才能验证「跨模块状态真的流动」（组交接后旧 owner 令牌失效、
+  身份降级）。三条铁律：假后端内部虽持有密码/令牌/邀请码明文，但 `toString` 只打印资源数量、
+  失败记录只记 `method path -> code`（不记请求体）；`/auth/me` 必须实现（登录/改密后都用原
+  令牌重读）；改密走 Authorization 头识别当前账号、只清该账号的改密标记。测试侧坑见
+  `flutter-widget-testing` 技能第八节（宽屏表格文字按钮 vs 窄屏 tooltip、连续 pump 两个 app
+  第二个 restore 卡 splash、`ensureVisible`、剪贴板 mock、`退出登录` 按钮非每页都有）。
 - **点下拉 / 菜单里的某一项要用 `find.text(label).last`**：下拉**打开后**，按钮自己显示的
   那一项（当前值）会与菜单里的同一项一起命中 `find.text(label)`，唯一匹配的写法直接
   `Found 2 widgets` 报错。实测（初始值 `A`、选项 `A`/`B`）：关闭态 `A=1 / B=0`，
