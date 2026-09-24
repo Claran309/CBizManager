@@ -173,7 +173,9 @@ void main() {
 
     test('permission_codes 含非字符串元素抛 FormatException', () {
       expect(
-        () => AuthProfile.fromJson(mePayload(permissionCodes: const <Object?>[7])),
+        () => AuthProfile.fromJson(
+          mePayload(permissionCodes: const <Object?>[7]),
+        ),
         throwsA(isA<FormatException>()),
       );
       expect(
@@ -330,18 +332,23 @@ void main() {
     );
 
     test('绑定 user / group / role / 改密态 / 权限集合', () {
+      expect(sessionFor().scopeKey, '11:7:group_owner:owner:false:');
       expect(
-        sessionFor().scopeKey,
-        '11:7:group_owner:owner:false:',
-      );
-      expect(
-        sessionFor(userId: 22, username: 'sales', accountType: 'member', memberType: 'member')
-            .scopeKey,
+        sessionFor(
+          userId: 22,
+          username: 'sales',
+          accountType: 'member',
+          memberType: 'member',
+        ).scopeKey,
         '22:7:member:member:false:',
       );
       expect(
-        sessionFor(username: 'admin', accountType: 'platform_admin', group: null, memberType: null)
-            .scopeKey,
+        sessionFor(
+          username: 'admin',
+          accountType: 'platform_admin',
+          group: null,
+          memberType: null,
+        ).scopeKey,
         '11:0:platform_admin:-:false:',
       );
     });

@@ -27,16 +27,17 @@ Map<String, Object?> _mePayload({
 };
 
 /// 组主账号：隐式持有组内全部权限。
-AuthProfile ownerProfile({bool mustChangePassword = false}) => AuthProfile.fromJson(
-  _mePayload(
-    userId: 11,
-    username: 'owner',
-    accountType: 'group_owner',
-    group: const <String, Object?>{'id': 7, 'name': 'Finance'},
-    memberType: 'owner',
-    mustChangePassword: mustChangePassword,
-  ),
-);
+AuthProfile ownerProfile({bool mustChangePassword = false}) =>
+    AuthProfile.fromJson(
+      _mePayload(
+        userId: 11,
+        username: 'owner',
+        accountType: 'group_owner',
+        group: const <String, Object?>{'id': 7, 'name': 'Finance'},
+        memberType: 'owner',
+        mustChangePassword: mustChangePassword,
+      ),
+    );
 
 /// 普通业务员：只持有被显式授予的权限码。
 AuthProfile memberProfile({

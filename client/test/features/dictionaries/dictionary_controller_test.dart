@@ -125,13 +125,13 @@ void main() {
         DictionaryStatus.disabled,
         1,
       );
-    final secondWrite = controller.changeStatus(
-      5,
-      DictionaryStatus.active,
-      2,
-    );
-    await Future<void>.delayed(Duration.zero);
-    expect(repository.statusWriteCalls, 1);
+      final secondWrite = controller.changeStatus(
+        5,
+        DictionaryStatus.active,
+        2,
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.statusWriteCalls, 1);
       first.complete(disabledDictionaryEntry);
       await firstWrite;
       await Future<void>.delayed(Duration.zero);

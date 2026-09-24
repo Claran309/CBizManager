@@ -117,10 +117,10 @@ void main() {
       final controller = container.read(memberControllerProvider.notifier);
       await controller.load();
 
-    final firstWrite = controller.changeStatus(7, MemberStatus.disabled, 1);
-    final secondWrite = controller.changeStatus(7, MemberStatus.active, 2);
-    await Future<void>.delayed(Duration.zero);
-    expect(repository.statusWriteCalls, 1);
+      final firstWrite = controller.changeStatus(7, MemberStatus.disabled, 1);
+      final secondWrite = controller.changeStatus(7, MemberStatus.active, 2);
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.statusWriteCalls, 1);
       first.complete(disabledMemberForController);
       await firstWrite;
       await Future<void>.delayed(Duration.zero);
