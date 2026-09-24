@@ -481,6 +481,47 @@ void main() {
     });
   });
 
+  /* ------------------------------------------------- 成员权限地址的解析 */
+
+  group('成员权限替换地址', () {
+    test('正整数编号原样进入权限页', () {
+      expect(parseMembershipId('7'), 7);
+      expect(memberPermissionsRedirect('7'), isNull);
+    });
+
+    test('非法编号一律回成员列表并带提示，而不是拿假 ID 去请求', () {
+      // 空串与 'abc' 来自手改地址栏；'0' 与 '-1' 违反契约的 minimum: 1；
+      // '1.5' 与 '12a' 是 tryParse 应当拒绝的半吊子数字。
+      // 一个假 ID 打到 `/members/0/permissions` 只会得到 404，
+      // 用户既不知道发生了什么，也不知道下一步该去哪。
+      for (final raw in <String?>[
+        null,
+        '',
+        '   ',
+        'abc',
+        '0',
+        '-1',
+        '1.5',
+        '12a',
+      ]) {
+        expect(parseMembershipId(raw), isNull, reason: '「$raw」不应被当成合法成员编号');
+        expect(
+          memberPermissionsRedirect(raw),
+          '/members?notice=invalid_membership_id',
+          reason: '「$raw」应当被送回成员列表',
+        );
+      }
+    });
+
+    test('组编号与成员编号共用同一套判定，只是语义不同', () {
+      // 两者都要求「正整数、下界 1」。共用实现是为了让将来收紧规则时
+      // 不会只改一处 —— 但调用点读到的仍是各自具名的函数，不会读错语义。
+      for (final raw in <String>['7', '42', '9999']) {
+        expect(parseMembershipId(raw), parseGroupId(raw));
+      }
+    });
+  });
+
   /* ------------------------------------------------------ 真实路由器闭环 */
 
   group('真实 GoRouter 闭环', () {

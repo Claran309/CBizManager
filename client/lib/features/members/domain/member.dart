@@ -1,3 +1,5 @@
+import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
+
 enum MemberStatus {
   active('active'),
   disabled('disabled'),
@@ -36,10 +38,20 @@ final class Member {
 
   final String username;
   final String displayName;
+
+  /// 成员的组内角色，契约枚举 `owner` / `member`。
+  ///
+  /// 解析时**不**在这里转成 [MemberType]：未知取值要让整条记录解析失败
+  /// （而不是降级成 member），判断留给 [isGroupOwner]，
+  /// 它复用 core/auth 那份枚举当唯一真相，避免散落 `'owner'` 字面量。
   final String memberType;
+
   final MemberStatus status;
   final Set<String> permissionCodes;
   final int version;
+
+  /// 这一行是不是组主账号。
+  bool get isGroupOwner => memberType == MemberType.owner.wireValue;
 
   factory Member.fromJson(Map<String, Object?> json) {
     final user = json['user'];

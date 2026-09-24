@@ -133,10 +133,17 @@ String? authRedirect(AuthState auth, String location) {
 /// 返回 null 表示地址里的编号非法。调用方负责把用户送回组列表并提示，
 /// 而不是让详情页带着一个假 ID 去请求 —— 那样只会拿到一个 404，
 /// 外加一条完全没法指导下一步的提示。
+int? parseGroupId(String? raw) => _parsePositiveId(raw);
+
+/// 解析 `/members/:membershipId/permissions` 里的成员编号。
 ///
-/// 下界判 1 而不是 0：契约里 `group_id` 标了 `minimum: 1`，
-/// 0 与负数都不是合法编号。
-int? parseGroupId(String? raw) {
+/// 与 [parseGroupId] 共用同一套判定（正整数、下界 1），只是语义不同。
+/// 拆成两个具名函数是为了让调用点读起来就是「组编号」「成员编号」，
+/// 而不是满屏的 `parsePositiveId` —— 读错语义时没人拦得住你。
+int? parseMembershipId(String? raw) => _parsePositiveId(raw);
+
+/// 契约里所有 `*_id` 都是 `minimum: 1`，所以 0 与负数一律非法。
+int? _parsePositiveId(String? raw) {
   if (raw == null) return null;
   final value = int.tryParse(raw);
   if (value == null || value < 1) return null;
@@ -151,6 +158,15 @@ int? parseGroupId(String? raw) {
 String? groupDetailRedirect(String? rawGroupId) =>
     parseGroupId(rawGroupId) == null
     ? '/platform/groups?notice=invalid_group_id'
+    : null;
+
+/// 权限替换地址的跳转决策：编号非法就回成员列表并带上提示。
+///
+/// 与组详情同样的理由：一个假 ID 打到 `/members/0/permissions` 只会得到 404，
+/// 用户既不知道发生了什么，也不知道下一步该去哪。
+String? memberPermissionsRedirect(String? rawMembershipId) =>
+    parseMembershipId(rawMembershipId) == null
+    ? '/members?notice=invalid_membership_id'
     : null;
 
 final routerProvider = Provider<GoRouter>((Ref ref) {
@@ -229,13 +245,31 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
       ),
       GoRoute(
         path: '/members',
-        builder: (BuildContext context, GoRouterState state) =>
-            const MembersPage(),
+        builder: (BuildContext context, GoRouterState state) => MembersPage(
+          // 非法 membershipsId 被重定向回来时由地址上的 query 带提示，
+          // 与平台组列表同一套做法：地址栏与内容始终一致。
+          notice: state.uri.queryParameters['notice'],
+        ),
       ),
       GoRoute(
         path: '/members/:membershipId/permissions',
+        // 编号非法就**重定向**回成员列表，而不是在 builder 里渲染别的页面：
+        // builder 期间调 go() 会撞上「构建过程中改路由」的断言。
+        redirect: (BuildContext context, GoRouterState state) =>
+            memberPermissionsRedirect(state.pathParameters['membershipId']),
         builder: (BuildContext context, GoRouterState state) =>
-            const MemberPermissionsPage(),
+            MemberPermissionsPage(
+              // redirect 已经挡掉非法编号，类型系统却不知道，所以这里再解析
+              // 一次；真拿到 null 说明 redirect 与 builder 的判断不一致，
+              // 用 0 兜底会让页面请求 `/members/0/permissions` 并得到一个明确的
+              // 404，比在路由层抛异常更容易定位。
+              membershipId:
+                  parseMembershipId(state.pathParameters['membershipId']) ?? 0,
+              // 换一个成员就是一个新的页面状态：草稿、失败提示都该从头开始。
+              key: ValueKey<String>(
+                'member-permissions-${state.pathParameters['membershipId']}',
+              ),
+            ),
       ),
       GoRoute(
         path: '/dictionaries',
