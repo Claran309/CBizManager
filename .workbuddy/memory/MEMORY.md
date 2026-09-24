@@ -284,6 +284,22 @@
   调用处照写 `PageResult<int>.fromJson`）；sealed 基类要写成命名参数
   `const Base({required this.version});`，子类才能 `required super.version`。
 
+## Flutter 成员与权限数据层约定（client/lib/features/members/）
+
+- **缓存的权威性以「是否带筛选」划界**：`MemberQuery.isUnfiltered`（keyword 只有空白
+  也算没筛）为真时才写本地缓存、断网时才回退缓存；**带筛选一律不写也不回退** ——
+  写会让全量缓存变残缺（而缓存是断网时唯一的兜底，缺了就没东西能纠正），
+  回退等于把全量冒充成筛选结果，用户会看到一堆不匹配的成员还以为筛选生效了。
+- **成员缓存表不存账号 ID**：`_readCachedMembers` 把 `Member.userId` 填 0 当哨兵
+  （契约 `UserSummary.id` 是 `minimum: 1`，撞不上真实账号）。界面判断「这一行是不是
+  我自己」只认 `userId == profile.user.id`，**绝不用 username 比**（用户名可改）；
+  对缓存数据一律判不出来 —— 宁可少禁用一次按钮（服务端还会再拒），也不靠猜。
+- **权限目录必须来自服务端**（`GET /groups/permission-catalog`），客户端不维护自己的一份：
+  本地写死的清单会在后端新增权限码之后变成「少一项」，而整体替换权限时会顺手把那一项清掉。
+  目录不写本地缓存、断网也不回退。
+- **权限快照（`MemberPermissions`）守与邀请码明文同样的规矩**：换目标先清旧的再拉，
+  否则用户会拿上一个人的勾选状态当基线去改，保存下去就是把 B 的权限换成 A 那一套。
+
 ## Flutter Controller 约定（client/lib/features/*/application/）
 
 **每个会话级 Controller 都要有三件套**（member / dictionary / platform 都已照此实现）：
