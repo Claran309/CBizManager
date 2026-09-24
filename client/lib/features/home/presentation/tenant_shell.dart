@@ -19,6 +19,9 @@ List<AppDestination> tenantDestinations(AuthProfile? profile) {
   }
   return <AppDestination>[
     _homeDestination,
+    // 入库/出库单据是业务员日常填写的核心，所有租户用户都要能进。
+    _inboundDestination,
+    _outboundDestination,
     // 邀请码决定「谁能进这个组」，只有组主账号该看见它。
     // 守卫里的 owner-only 规则负责最终裁决，这里只负责不给普通成员一个
     // 「点了会被弹回首页」的假入口。
@@ -38,6 +41,18 @@ const AppDestination _homeDestination = AppDestination(
   label: '首页',
   icon: Icons.dashboard_outlined,
   route: '/home',
+);
+
+const AppDestination _inboundDestination = AppDestination(
+  label: '入库单',
+  icon: Icons.inventory_2_outlined,
+  route: '/documents/inbound',
+);
+
+const AppDestination _outboundDestination = AppDestination(
+  label: '出库单',
+  icon: Icons.local_shipping_outlined,
+  route: '/documents/outbound',
 );
 
 const AppDestination _invitationsDestination = AppDestination(

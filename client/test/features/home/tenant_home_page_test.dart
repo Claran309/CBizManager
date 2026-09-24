@@ -21,14 +21,23 @@ void main() {
   /* -------------------------------------------------------- 导航裁剪 */
 
   group('租户导航裁剪', () {
-    test('组主账号得到 首页 / 邀请码 / 成员 / 字典', () {
+    test('组主账号得到 首页 / 入库单 / 出库单 / 邀请码 / 成员 / 字典', () {
       expect(_routesOf(ownerProfile()), <String>[
         '/home',
+        '/documents/inbound',
+        '/documents/outbound',
         '/invitations',
         '/members',
         '/dictionaries',
       ]);
-      expect(_labelsOf(ownerProfile()), <String>['首页', '邀请码', '成员', '字典']);
+      expect(_labelsOf(ownerProfile()), <String>[
+        '首页',
+        '入库单',
+        '出库单',
+        '邀请码',
+        '成员',
+        '字典',
+      ]);
     });
 
     test('主账号的权限来自身份，不来自 permission_codes', () {
@@ -40,8 +49,13 @@ void main() {
       expect(_routesOf(profile), contains('/members'));
     });
 
-    test('普通成员只有 首页 / 字典', () {
-      expect(_routesOf(memberProfile()), <String>['/home', '/dictionaries']);
+    test('普通成员只有 首页 / 入库单 / 出库单 / 字典', () {
+      expect(_routesOf(memberProfile()), <String>[
+        '/home',
+        '/documents/inbound',
+        '/documents/outbound',
+        '/dictionaries',
+      ]);
     });
 
     test('拿到 member.manage 的普通成员多一个「成员」，但永远没有「邀请码」', () {
@@ -49,7 +63,13 @@ void main() {
         memberProfile(permissionCodes: const <String>['member.manage']),
       );
 
-      expect(routes, <String>['/home', '/members', '/dictionaries']);
+      expect(routes, <String>[
+        '/home',
+        '/documents/inbound',
+        '/documents/outbound',
+        '/members',
+        '/dictionaries',
+      ]);
       // 邀请码是「谁能进这个组」的凭证，普通成员不该看见入口 ——
       // 即便他手握 member.manage，那也只是管状态，不是管准入。
       expect(routes, isNot(contains('/invitations')));
@@ -96,7 +116,7 @@ void main() {
       expect(find.text('TOKEN-MUST-NOT-RENDER'), findsNothing);
     });
 
-    testWidgets('主账号看到全部四项导航', (WidgetTester tester) async {
+    testWidgets('主账号看到全部六项导航', (WidgetTester tester) async {
       await pumpRealApp(
         tester,
         repository: FakeAuthRepository(session: ownerSession()),
@@ -104,12 +124,16 @@ void main() {
 
       expectTenantHome();
       expectDestination('首页', visible: true);
+      expectDestination('入库单', visible: true);
+      expectDestination('出库单', visible: true);
       expectDestination('邀请码', visible: true);
       expectDestination('成员', visible: true);
       expectDestination('字典', visible: true);
     });
 
-    testWidgets('普通成员看到 首页 / 字典，看不见成员与邀请码', (WidgetTester tester) async {
+    testWidgets('普通成员看到 首页 / 入库单 / 出库单 / 字典，看不见成员与邀请码', (
+      WidgetTester tester,
+    ) async {
       await pumpRealApp(
         tester,
         repository: FakeAuthRepository(session: memberSession()),
@@ -117,6 +141,8 @@ void main() {
 
       expectTenantHome();
       expectDestination('首页', visible: true);
+      expectDestination('入库单', visible: true);
+      expectDestination('出库单', visible: true);
       expectDestination('字典', visible: true);
       expectDestination('成员', visible: false);
       expectDestination('邀请码', visible: false);

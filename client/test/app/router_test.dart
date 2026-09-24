@@ -442,6 +442,12 @@ void main() {
         '/members',
         '/members/:membershipId/permissions',
         '/dictionaries',
+        '/documents/inbound',
+        '/documents/outbound',
+        '/documents/inbound/new',
+        '/documents/outbound/new',
+        '/documents/inbound/:documentId',
+        '/documents/outbound/:documentId',
       ]),
     );
     // `/platform/groups/new` 会被 `/platform/groups/:groupId` 一并匹配，
@@ -449,6 +455,15 @@ void main() {
     expect(
       paths.indexOf('/platform/groups/new'),
       lessThan(paths.indexOf('/platform/groups/:groupId')),
+    );
+    // 单据同理：`new` 字面量必须排在 `:documentId` 参数路由之前。
+    expect(
+      paths.indexOf('/documents/inbound/new'),
+      lessThan(paths.indexOf('/documents/inbound/:documentId')),
+    );
+    expect(
+      paths.indexOf('/documents/outbound/new'),
+      lessThan(paths.indexOf('/documents/outbound/:documentId')),
     );
   });
 

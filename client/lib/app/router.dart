@@ -5,6 +5,9 @@ import 'package:c_biz_docs_manager/features/auth/presentation/login_page.dart';
 import 'package:c_biz_docs_manager/features/auth/presentation/register_page.dart';
 import 'package:c_biz_docs_manager/features/auth/presentation/splash_page.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/presentation/dictionaries_page.dart';
+import 'package:c_biz_docs_manager/features/documents/domain/document.dart';
+import 'package:c_biz_docs_manager/features/documents/presentation/document_form_page.dart';
+import 'package:c_biz_docs_manager/features/documents/presentation/document_history_page.dart';
 import 'package:c_biz_docs_manager/features/home/presentation/tenant_home_page.dart';
 import 'package:c_biz_docs_manager/features/invitations/presentation/invitations_page.dart';
 import 'package:c_biz_docs_manager/features/members/presentation/member_permissions_page.dart';
@@ -169,6 +172,15 @@ String? memberPermissionsRedirect(String? rawMembershipId) =>
     ? '/members?notice=invalid_membership_id'
     : null;
 
+/// 解析 `/documents/:kind/:documentId` 里的单据编号。
+int? parseDocumentId(String? raw) => _parsePositiveId(raw);
+
+/// 单据详情地址的跳转决策：编号非法就回对应方向的历史列表。
+String? documentRedirect(String? rawDocumentId) =>
+    parseDocumentId(rawDocumentId) == null
+    ? '/documents/inbound?notice=invalid_document_id'
+    : null;
+
 final routerProvider = Provider<GoRouter>((Ref ref) {
   final refresh = _AuthRouterRefresh(ref);
   ref.onDispose(refresh.dispose);
@@ -275,6 +287,58 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
         path: '/dictionaries',
         builder: (BuildContext context, GoRouterState state) =>
             const DictionariesPage(),
+      ),
+      // 单据历史页：入库/出库两个方向。kind 是编译期就确定的两个字面量，
+      // 所以用字面量路由而不是参数路由，省掉「解析 kind 字符串 + 非法值重定向」。
+      GoRoute(
+        path: '/documents/inbound',
+        builder: (BuildContext context, GoRouterState state) =>
+            const DocumentHistoryPage(kind: DocumentKind.inbound),
+      ),
+      GoRoute(
+        path: '/documents/outbound',
+        builder: (BuildContext context, GoRouterState state) =>
+            const DocumentHistoryPage(kind: DocumentKind.outbound),
+      ),
+      // 新建填写页。字面量 `new` 必须排在 `:documentId` 之前，否则会被当成 id。
+      GoRoute(
+        path: '/documents/inbound/new',
+        builder: (BuildContext context, GoRouterState state) =>
+            const DocumentFormPage(kind: DocumentKind.inbound),
+      ),
+      GoRoute(
+        path: '/documents/outbound/new',
+        builder: (BuildContext context, GoRouterState state) =>
+            const DocumentFormPage(kind: DocumentKind.outbound),
+      ),
+      // 编辑/详情页。
+      GoRoute(
+        path: '/documents/inbound/:documentId',
+        redirect: (BuildContext context, GoRouterState state) =>
+            documentRedirect(state.pathParameters['documentId']),
+        builder: (BuildContext context, GoRouterState state) =>
+            DocumentFormPage(
+              kind: DocumentKind.inbound,
+              documentId:
+                  parseDocumentId(state.pathParameters['documentId']) ?? 0,
+              key: ValueKey<String>(
+                'document-inbound-${state.pathParameters['documentId']}',
+              ),
+            ),
+      ),
+      GoRoute(
+        path: '/documents/outbound/:documentId',
+        redirect: (BuildContext context, GoRouterState state) =>
+            documentRedirect(state.pathParameters['documentId']),
+        builder: (BuildContext context, GoRouterState state) =>
+            DocumentFormPage(
+              kind: DocumentKind.outbound,
+              documentId:
+                  parseDocumentId(state.pathParameters['documentId']) ?? 0,
+              key: ValueKey<String>(
+                'document-outbound-${state.pathParameters['documentId']}',
+              ),
+            ),
       ),
     ],
   );
