@@ -140,6 +140,10 @@
   完全不可用（`docker` 命令与 `com.docker.service` 都查不到），`-tags integration` 一律门控 SKIP；
   2026-09-24 主人启动后容器 `MySQL`（3306）已 healthy，7 个集成测试**首次真跑**并一次抓出
   4 个只在真实方言下才犯的错（保留字未转义、嵌套 struct 误判关联、零值日期、微秒截断）。
+  2026-09-24 晚（Task 16）又变了：CLI + Docker Desktop 已完整安装（29.0.1），但 **daemon 在
+  受限/后台 shell 里拉不起来**——`Docker Desktop.exe` 拉起后进程立即退出、WSL2 后端未初始化、
+  `dockerDesktopLinuxEngine` 命名管道不存在，连续 30s `docker ps` 全失败。即「装了 ≠ 能跑」，
+  daemon 需要主人**在可交互终端/完整桌面会话里**启动 Docker Desktop。
 - **真跑集成测试的方法**：`.workbuddy/tmp/run_integration.py` —— 等 3306 就绪 → 从
   `docker inspect MySQL` 读 `MYSQL_ROOT_PASSWORD`（脱敏，不落盘不打印）→ 给子进程注入
   `TEST_MYSQL_DSN=root:<pwd>@tcp(127.0.0.1:3306)/?charset=utf8mb4` → 跑 go test，可带 `-run` 正则。
