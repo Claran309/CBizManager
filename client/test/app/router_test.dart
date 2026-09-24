@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../support/auth_fixtures.dart';
 
+/// 只关心会话本身的路由守卫替身；注册与改密不属于本文件的关注点。
 final class StaticAuthRepository implements AuthRepository {
   const StaticAuthRepository(this.session);
 
@@ -21,6 +22,16 @@ final class StaticAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> restore() async => session;
+
+  @override
+  Future<RegistrationResult> register(RegistrationDraft draft) =>
+      throw UnsupportedError('路由守卫测试不覆盖注册');
+
+  @override
+  Future<AuthSession> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) => throw UnsupportedError('路由守卫测试不覆盖改密');
 }
 
 void main() {

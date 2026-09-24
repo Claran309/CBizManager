@@ -126,9 +126,7 @@ final class AuthProfile {
     final rawMemberType = json['member_type'];
     final memberType = rawMemberType == null
         ? null
-        : MemberType.fromWireValue(
-            _requireNonEmptyString(json, 'member_type'),
-          );
+        : MemberType.fromWireValue(_requireNonEmptyString(json, 'member_type'));
 
     final profile = AuthProfile(
       user: user,
@@ -221,6 +219,41 @@ final class AuthSession {
   }
 }
 
+/// 邀请码注册的请求草稿（对应契约 `RegisterRequest`）。
+///
+/// 密码在这里只作为一次性的请求参数存在：既不写入本地存储，也不进日志。
+final class RegistrationDraft {
+  const RegistrationDraft({
+    required this.invitationCode,
+    required this.username,
+    required this.displayName,
+    required this.password,
+  });
+
+  final String invitationCode;
+  final String username;
+  final String displayName;
+  final String password;
+}
+
+/// 注册成功后服务端回传的摘要（对应契约 `RegisterData`）。
+///
+/// 注册**不签发令牌**，所以这里没有 [AuthSession]：客户端只拿到「账号建好了、
+/// 叫什么名字」这一点信息，用来把用户名预填回登录页。
+final class RegistrationResult {
+  const RegistrationResult({required this.username, required this.groupName});
+
+  final String username;
+  final String groupName;
+
+  /// 复用 [AuthUser] / [AuthGroup] 的解析，注册响应里的身份也走同一套严格校验。
+  factory RegistrationResult.fromJson(Map<String, Object?> json) {
+    final user = AuthUser.fromJson(_requireObject(json, 'user'));
+    final group = AuthGroup.fromJson(_requireObject(json, 'group'));
+    return RegistrationResult(username: user.username, groupName: group.name);
+  }
+}
+
 /// Keeps the access token out of durable storage and makes it replaceable in
 /// tests without coupling network code to a repository implementation.
 abstract interface class AccessTokenStore {
@@ -291,9 +324,7 @@ Set<String> _requirePermissionCodes(Map<String, Object?> json) {
   final codes = <String>{};
   for (final item in value) {
     if (item is! String) {
-      throw const FormatException(
-        'permission_codes must contain only strings',
-      );
+      throw const FormatException('permission_codes must contain only strings');
     }
     codes.add(item);
   }

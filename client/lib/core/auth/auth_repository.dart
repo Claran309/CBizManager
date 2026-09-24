@@ -1,7 +1,9 @@
 import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/credential_store.dart';
 import 'package:c_biz_docs_manager/core/auth/web_cookie_reader.dart';
+import 'package:c_biz_docs_manager/core/error/app_failure.dart';
 import 'package:c_biz_docs_manager/core/network/api_envelope.dart';
+import 'package:c_biz_docs_manager/core/network/error_mapper.dart';
 import 'package:dio/dio.dart';
 
 /// Isolates endpoint selection and transport details from session lifecycle.
@@ -17,12 +19,23 @@ abstract interface class AuthRemoteDataSource {
   Future<AuthProfile> me(String accessToken);
 
   Future<void> logout({required bool web, String? accessToken});
+
+  Future<RegistrationResult> register(RegistrationDraft draft);
+
+  Future<void> changePassword(String currentPassword, String newPassword);
 }
 
 abstract interface class AuthRepository {
   Future<AuthSession> login(String username, String password);
 
   Future<AuthSession> restore();
+
+  Future<RegistrationResult> register(RegistrationDraft draft);
+
+  Future<AuthSession> changePassword(
+    String currentPassword,
+    String newPassword,
+  );
 
   Future<void> logout();
 }
@@ -61,6 +74,30 @@ final class DefaultAuthRepository implements AuthRepository {
       throw StateError('No native refresh token is available');
     }
     return _accept(await remote.refreshNative(refreshToken));
+  }
+
+  @override
+  Future<RegistrationResult> register(RegistrationDraft draft) async {
+    // 注册不建立会话：本地既不写刷新令牌、也不设访问令牌。用户必须自己用新账号
+    // 登录一次，否则新人会被静默当成已登录，绕过登录页与强制改密两道关。
+    return remote.register(draft);
+  }
+
+  @override
+  Future<AuthSession> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    await remote.changePassword(currentPassword, newPassword);
+    final accessToken = accessTokens.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw StateError('Changing a password requires an active access token');
+    }
+    // 服务端改密既不吊销当前访问令牌、也不签发新的，所以这里既不能重新登录、
+    // 也不能把密码存起来；只需用同一个令牌重读身份，拿到 must_change_password=false
+    // 的新快照。改密不产生新令牌，因此没有可用的过期时间，accessExpiresAt 留空。
+    final profile = await remote.me(accessToken);
+    return AuthSession(accessToken: accessToken, profile: profile);
   }
 
   @override
@@ -141,7 +178,7 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
   );
 
   @override
-  Future<AuthProfile> me(String accessToken) async {
+  Future<AuthProfile> me(String accessToken) => _guard(() async {
     final response = await _dio.get<Object?>(
       '$_apiPrefix/me',
       options: Options(
@@ -153,33 +190,77 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
     return AuthProfile.fromJson(
       _decodeEnvelopeData(response.data, 'Current-user response'),
     );
-  }
+  });
 
   @override
-  Future<void> logout({required bool web, String? accessToken}) async {
-    if (web) {
-      await _dio.post<void>(
-        '$_apiPrefix/web/logout',
-        options: _webOptions(requireCSRF: true),
-      );
-      return;
-    }
-    if (accessToken == null || accessToken.isEmpty) {
-      throw StateError('Native logout requires an access token');
-    }
-    await _dio.post<void>(
-      '$_apiPrefix/logout',
-      options: Options(
-        headers: <String, Object?>{'Authorization': 'Bearer $accessToken'},
-      ),
-    );
-  }
+  Future<void> logout({required bool web, String? accessToken}) =>
+      _guard(() async {
+        if (web) {
+          await _dio.post<void>(
+            '$_apiPrefix/web/logout',
+            options: _webOptions(requireCSRF: true),
+          );
+          return;
+        }
+        if (accessToken == null || accessToken.isEmpty) {
+          throw StateError('Native logout requires an access token');
+        }
+        await _dio.post<void>(
+          '$_apiPrefix/logout',
+          options: Options(
+            headers: <String, Object?>{'Authorization': 'Bearer $accessToken'},
+          ),
+        );
+      });
+
+  @override
+  Future<RegistrationResult> register(RegistrationDraft draft) =>
+      _guard(() async {
+        final response = await _dio.post<Object?>(
+          '$_apiPrefix/register',
+          data: <String, Object?>{
+            'invitation_code': draft.invitationCode,
+            'username': draft.username,
+            'display_name': draft.displayName,
+            'password': draft.password,
+          },
+        );
+        // 注册响应里没有 access_token，也就无从解析出一个会话 —— 这正是契约本意。
+        return RegistrationResult.fromJson(
+          _decodeEnvelopeData(response.data, 'Registration response'),
+        );
+      });
+
+  @override
+  Future<void> changePassword(String currentPassword, String newPassword) =>
+      _guard(() async {
+        // 鉴权头由 ApiClient 的拦截器统一注入，这里不自己拼 Bearer：
+        // 多一份拼装就多一份与刷新逻辑不一致的可能。
+        final response = await _dio.put<Object?>(
+          '$_apiPrefix/password',
+          data: <String, Object?>{
+            'current_password': currentPassword,
+            'new_password': newPassword,
+          },
+        );
+        final data = _decodeEnvelopeData(
+          response.data,
+          'Password change response',
+        );
+        if (data['changed'] != true) {
+          // 200 却没说改成功，说明契约被破坏。此时静默通过会让客户端误以为强制改密
+          // 已经解除，把用户卡在改密页与业务页之间来回弹。
+          throw const FormatException(
+            'Password change response must report changed=true',
+          );
+        }
+      });
 
   Future<TokenResponse> _postTokens(
     String path,
     Object? body, {
     Options? options,
-  }) async {
+  }) => _guard(() async {
     final response = await _dio.post<Object?>(
       path,
       data: body,
@@ -198,7 +279,7 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
       accessExpiresAt: _readDate(data['access_expires_at']),
       refreshExpiresAt: _readDate(data['refresh_expires_at']),
     );
-  }
+  });
 
   /// 解出响应 Envelope 的 data 对象。
   ///
@@ -251,5 +332,23 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
       );
     }
     return DateTime.parse(value).toUtc();
+  }
+}
+
+/// 把传输层与契约解析的异常统一收敛成 [AppFailure]。
+///
+/// 与 dictionaries / members 仓储里的同名辅助保持一致：只有变成 [AppFailure]，
+/// 上层 Controller 的 `on AppFailure catch` 才接得住。否则改密的「当前密码错误」
+/// 或一次网络抖动会以原始 [DioException] 逃逸出状态机，页面既拿不到失败详情，
+/// 也没法把字段错误映射到对应的输入框。
+Future<T> _guard<T>(Future<T> Function() operation) async {
+  try {
+    return await operation();
+  } on DioException catch (error) {
+    throw mapDioFailure(error);
+  } on FormatException {
+    throw const ServerFailure('Invalid server response');
+  } on TypeError {
+    throw const ServerFailure('Invalid server response');
   }
 }

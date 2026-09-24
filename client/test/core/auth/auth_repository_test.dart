@@ -2,6 +2,7 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
 import 'package:c_biz_docs_manager/core/auth/credential_store.dart';
 import 'package:c_biz_docs_manager/core/auth/web_credential_store.dart';
+import 'package:c_biz_docs_manager/core/error/app_failure.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,22 +21,35 @@ final class RecordingAuthAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     requests.add(options);
-    final responseBody = options.uri.path.endsWith('/me')
-        ? '''{"code":"OK","message":"success","data":{
-             "user":{"id":11,"username":"owner","display_name":"Owner","account_type":"group_owner"},
-             "group":{"id":7,"name":"Finance"},
-             "member_type":"owner",
-             "must_change_password":true,
-             "permission_codes":[]
-           },"request_id":"request-1"}'''
-        : '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''';
     return ResponseBody.fromString(
-      responseBody,
+      _bodyFor(options.uri.path),
       200,
       headers: <String, List<String>>{
         Headers.contentTypeHeader: <String>[Headers.jsonContentType],
       },
     );
+  }
+
+  String _bodyFor(String path) {
+    if (path.endsWith('/me')) {
+      return '''{"code":"OK","message":"success","data":{
+             "user":{"id":11,"username":"owner","display_name":"Owner","account_type":"group_owner"},
+             "group":{"id":7,"name":"Finance"},
+             "member_type":"owner",
+             "must_change_password":true,
+             "permission_codes":[]
+           },"request_id":"request-1"}''';
+    }
+    if (path.endsWith('/register')) {
+      return '''{"code":"OK","message":"success","data":{
+             "user":{"id":22,"username":"sales","display_name":"Sales","account_type":"member"},
+             "group":{"id":7,"name":"Finance"}
+           },"request_id":"request-1"}''';
+    }
+    if (path.endsWith('/password')) {
+      return '''{"code":"OK","message":"success","data":{"changed":true},"request_id":"request-1"}''';
+    }
+    return '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''';
   }
 }
 
@@ -79,8 +93,25 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   var webRefreshCalls = 0;
   var meCalls = 0;
   var logoutCalls = 0;
+  var registerCalls = 0;
+  var changePasswordCalls = 0;
   Object? logoutError;
+  Object? changePasswordError;
   String? receivedRefreshToken;
+
+  /// 最近一次 `/auth/me` 用到的访问令牌，用于断言改密后沿用了旧令牌。
+  String? receivedMeToken;
+
+  /// 最近一次注册提交的草稿。
+  RegistrationDraft? receivedRegistration;
+
+  /// 最近一次改密提交的 (当前密码, 新密码)。
+  (String, String)? receivedPasswordChange;
+
+  RegistrationResult registration = const RegistrationResult(
+    username: 'sales',
+    groupName: 'Finance',
+  );
 
   /// 服务端 `/auth/me` 的身份快照，默认与 [RecordingAuthAdapter] 的响应保持一致。
   AuthProfile profile = ownerProfile(mustChangePassword: true);
@@ -119,7 +150,28 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   @override
   Future<AuthProfile> me(String accessToken) async {
     meCalls++;
+    receivedMeToken = accessToken;
     return profile;
+  }
+
+  @override
+  Future<RegistrationResult> register(RegistrationDraft draft) async {
+    registerCalls++;
+    receivedRegistration = draft;
+    return registration;
+  }
+
+  @override
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    changePasswordCalls++;
+    receivedPasswordChange = (currentPassword, newPassword);
+    final error = changePasswordError;
+    if (error != null) {
+      throw error;
+    }
   }
 
   @override
@@ -288,4 +340,128 @@ void main() {
       expect(remote.logoutCalls, 1);
     },
   );
+
+  test('注册只创建账号并回传用户名，不建立本地会话', () async {
+    final remote = FakeAuthRemoteDataSource();
+    final credentials = FakeCredentialStore();
+    final accessTokens = InMemoryAccessTokenStore();
+    final repository = DefaultAuthRepository(
+      remote: remote,
+      credentials: credentials,
+      accessTokens: accessTokens,
+      platform: AuthPlatform.native,
+    );
+
+    final result = await repository.register(_draft);
+
+    expect(remote.registerCalls, 1);
+    expect(remote.receivedRegistration, same(_draft));
+    expect(result.username, 'sales');
+    expect(result.groupName, 'Finance');
+    // 注册不等于登录：服务端只回 user/group，不发令牌。客户端必须保持登出，
+    // 否则新人会被静默当成已登录，绕过登录页与强制改密这两道关。
+    expect(accessTokens.accessToken, isNull);
+    expect(credentials.token, isNull);
+    expect(credentials.writes, 0);
+    expect(remote.meCalls, 0);
+    expect(remote.nativeLoginCalls, 0);
+  });
+
+  test('改密后用同一个访问令牌重读身份，不重新登录也不保存密码', () async {
+    final remote = FakeAuthRemoteDataSource();
+    final credentials = FakeCredentialStore()..token = 'refresh';
+    final accessTokens = InMemoryAccessTokenStore()..accessToken = 'access';
+    final repository = DefaultAuthRepository(
+      remote: remote,
+      credentials: credentials,
+      accessTokens: accessTokens,
+      platform: AuthPlatform.native,
+    );
+    // 服务端在改密成功时会清掉强制改密标记，客户端必须重新读取才会拿到新身份。
+    remote.profile = ownerProfile();
+
+    final session = await repository.changePassword(
+      'old-password',
+      'new-password',
+    );
+
+    expect(remote.changePasswordCalls, 1);
+    expect(remote.receivedPasswordChange, ('old-password', 'new-password'));
+    expect(remote.meCalls, 1);
+    // 改密不签发新令牌：沿用内存里已有的 access token，绝不走登录流程。
+    expect(remote.receivedMeToken, 'access');
+    expect(session.accessToken, 'access');
+    expect(session.profile.mustChangePassword, isFalse);
+    expect(session.scopeKey, '11:7:group_owner:owner:false:');
+    // 新密码只是请求参数：既不落凭据存储，也不产生新的刷新令牌轮换。
+    expect(credentials.writes, 0);
+    expect(credentials.token, 'refresh');
+    expect(remote.nativeLoginCalls, 0);
+  });
+
+  test('改密失败时不改动本地凭据，也不白跑一次身份读取', () async {
+    final remote = FakeAuthRemoteDataSource()
+      ..changePasswordError = const UnauthenticatedFailure('当前密码错误');
+    final credentials = FakeCredentialStore()..token = 'refresh';
+    final accessTokens = InMemoryAccessTokenStore()..accessToken = 'access';
+    final repository = DefaultAuthRepository(
+      remote: remote,
+      credentials: credentials,
+      accessTokens: accessTokens,
+      platform: AuthPlatform.native,
+    );
+
+    await expectLater(
+      repository.changePassword('wrong-password', 'new-password'),
+      throwsA(isA<UnauthenticatedFailure>()),
+    );
+
+    expect(accessTokens.accessToken, 'access');
+    expect(credentials.token, 'refresh');
+    expect(remote.meCalls, 0);
+  });
+
+  test('Dio 认证适配器按契约提交注册与改密请求体', () async {
+    final adapter = RecordingAuthAdapter();
+    final dio = Dio(BaseOptions(baseUrl: 'https://api.example.test'))
+      ..httpClientAdapter = adapter;
+    final remote = DioAuthRemoteDataSource(dio);
+
+    final registration = await remote.register(_draft);
+    await remote.changePassword('old-password', 'new-password');
+
+    expect(adapter.requests.map((request) => request.uri.path), <String>[
+      '/api/v1/auth/register',
+      '/api/v1/auth/password',
+    ]);
+    expect(adapter.requests[0].method, 'POST');
+    expect(adapter.requests[0].data, <String, Object?>{
+      'invitation_code': 'INV-1',
+      'username': 'sales',
+      'display_name': 'Sales',
+      'password': 'password123',
+    });
+    expect(adapter.requests[1].method, 'PUT');
+    expect(adapter.requests[1].data, <String, Object?>{
+      'current_password': 'old-password',
+      'new_password': 'new-password',
+    });
+    expect(registration.username, 'sales');
+    expect(registration.groupName, 'Finance');
+    // 两个请求都不带 Authorization：注册是匿名接口，改密则由 ApiClient 的
+    // 拦截器统一注入 Bearer，适配器自己拼鉴权头只会多出一份真相。
+    expect(
+      adapter.requests.every(
+        (request) => !request.headers.containsKey('Authorization'),
+      ),
+      isTrue,
+    );
+  });
 }
+
+const _draft = RegistrationDraft(
+  invitationCode: 'INV-1',
+  username: 'sales',
+  displayName: 'Sales',
+  password: 'password123',
+);
