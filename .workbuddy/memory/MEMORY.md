@@ -166,6 +166,13 @@
   `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`，把输出**捕获进变量**，
   再用 `[System.IO.File]::WriteAllText(..., New-Object System.Text.UTF8Encoding($false))` 落盘。
 - **PowerShell 工具在本会话不返回 stdout**，`Write-Output` 看不到结果 ⇒ 一律写文件再 `Read`。
+- **dart / flutter 子命令统一走 `.workbuddy/tmp/dart.ps1`**：第一个参数是**用哪个可执行文件**
+  （`dart` / `flutter`），之后原样透传 —— `dart.ps1 dart format <files>`、
+  `dart.ps1 flutter analyze`、`dart.ps1 flutter test <path> -r expanded`。
+  内部清代理 + UTF-8 无 BOM 落日志 + 显式 `exit $LASTEXITCODE`，日志路径用 `CBIZ_DART_LOG` 覆盖。
+  （别在 ps1 里把子命令当成可选参数：`& $exe $Tool @Args` 与 `& $exe @Args` 只能选一种，
+  写错的表现是 `Could not find a command named "lib/features/..."`。）
+  **本机 bash shim 跑不了 dart / flutter**（`ls` / `dirname` 都缺），只能用 PowerShell。
 - **写 git 提交信息文件不要用 `Out-File -Encoding UTF8`**：Windows PowerShell 5.1 会加 UTF-8 BOM，
   于是提交标题变成 `\ufefffeat: ...`。用 Write 工具或 .NET UTF8Encoding($false) 写。
   自检脚本：`.workbuddy/tmp/check_bom.py`（扫最近提交标题是否以 BOM 开头）。
@@ -300,6 +307,36 @@
 - **权限快照（`MemberPermissions`）守与邀请码明文同样的规矩**：换目标先清旧的再拉，
   否则用户会拿上一个人的勾选状态当基线去改，保存下去就是把 B 的权限换成 A 那一套。
 
+## Flutter 辅助字典约定（client/lib/features/dictionaries/）
+
+- **`DictionaryKindRules` 扩展是唯一的口径来源**（`domain/dictionary_entry.dart` 的
+  `label` / `acceptsContactPhone` / `requiresParent` / `usesParent`），规则直接来自后端
+  `validateDraft`，**不是界面偏好**：只有 `customer` 接受 `contact_phone`（其余 kind 带上即
+  `VALIDATION_FAILED`）；非型号 kind 带 `parent_id` 判 `DICTIONARY_PARENT_INVALID`；
+  只有 `product_model` 的 `parent_id` **必填**，且父级必须是**启用中的** `product_name`；
+  `name` 上限按 **rune** 计 191。（Task 13 的计划文档把口径写成了「supplier / customer 都显示
+  contact phone」，与后端和 foundation 设计文档都不符 —— **以后端 + 设计文档为准**。）
+- **`DictionaryQuery.status == null` = 「只看启用中」，不是「全部」**：契约里根本没有
+  「两种状态一起返回」的取值（服务端无 `status` 参数时收敛成 active，显式 `disabled` 需要
+  `dictionary.manage`）。所以状态筛选只有两项、`null` 同时是本地兜底缓存的写入判据，
+  本地合并判断也必须同口径（`entry.status == (query.status ?? active)`），
+  否则刚停用的条目会继续留在「启用中」的列表里，看起来像筛选没生效。
+- **父级候选与主列表必须分开**（`DictionaryState.parentOptions`）：六 kind 共页，主列表是当前
+  筛选的 kind，父级候选固定是 `product_name` 的 active；混进 `items` 会让主列表凭空多出一批品名。
+  **刻意不做「已拿到就跳过」的缓存** —— 用户刚在别处新建了品名，下拉里必须能看到；
+  调用点只有两个（切到型号、打开型号 editor），每次重拉的代价远小于「看不到刚建的数据」。
+- **写结果合并必须双向**：匹配当前筛选 → 替换 / 追加；**不匹配 → 摘掉**；
+  **匹配但不在列表里 → 补回去**。只做前两个会漏掉「连续两次写」（停用 → 启用、或两次快速
+  改状态）：第一步已把条目摘掉，第二步的写结果走替换分支时列表里没有可替换的行，
+  条目就永久消失 —— 而服务端下一次全量查询一定会把它带回来，表现为「刷新一下又有了」。
+  补的时候追加在末尾即可（服务端排序依据客户端并不知道，别猜位置）。
+- **页面级角色裁剪**：状态筛选只对有 `dictionary.manage` 的人显示；本地残留的「已停用」选择在
+  权限丢失时一律退回默认口径（绝不发一个必然 403 的请求）；行里的父级品名不在候选里就
+  **如实显示 `品名 #id`**，不要编名字（品名可能刚被停用，也可能这次就没拉到候选）。
+- **editor 里父级下拉的 `initialValue` 不在 items 里时（父级被停用）必须补一个占位项**，
+  否则 `DropdownButton` 会直接断言「value 不在 items 里」把对话框搞崩。页面上的父级筛选
+  下拉同理。
+
 ## Flutter Controller 约定（client/lib/features/*/application/）
 
 **每个会话级 Controller 都要有三件套**（member / dictionary / platform 都已照此实现）：
@@ -332,7 +369,17 @@
 - **导航用状态驱动而非回调**：创建成功把 `createdGroupId` 放进 state，页面 watch 到非空再跳，
   跳前调 `reset()`（避免返回时重复跳转）。回调在页面卸载后触发会操作已销毁的 Context。
 - 测试夹具：`test/support/fake_platform_repository.dart` 是「排队响应 → 注入错误 →
-  默认结果」三档优先级的可编程假仓储，新模块的 Controller 测试可照这个模式写。
+  默认结果」三档优先级的可编程假仓储，新模块的 Controller 测试可照这个模式写
+  （字典模块的 `fake_dictionary_repository.dart` 还多了「按 kind 分流」的 `byKind`：
+  六 kind 共页时主列表与父级候选是**两路并发 list**，只有一个 `entries` 兜底会拿到同一批数据）。
+- **假仓储的写方法必须返回「变更后的实体」**：真实的 `create` / `update` / `changeStatus`
+  都返回修改后的那一条，控制器正是靠它把新状态合回本地列表。假实现原样返回旧条目（或
+  `entries.first`）会让「停用后条目从筛选里消失」这类断言测的是一个**假前提** ——
+  红得莫名其妙，而且会把排查方向带偏（看起来像合并逻辑错了）。
+  默认就**按入参合成实体**（`changeStatus` 造 status 改后且 version+1 的副本；`update` 应用
+  draft 但不动 status；`create` 用 `maxId+1` 造新条目），只在刻意要造固定数据时才用
+  `writeResult` 直接覆盖；引用了不存在的 id 直接 `throw`（用例自己写错就该红在看得懂的地方）。
+  三个写方法用 `async` + `throw`，与「返回失败的 Future」语义一致且没有同步抛的时序差异。
 - **敏感明文（邀请码）只活内存**：唯一承载字段是 state 的 `visibleSecret`；查看前先清旧
   （一次只留一份）、撤销成功 / 撤销冲突 / 刷新后列表里不再 active / 列表找不到 / `onDispose`
   都清。`InvitationSecret.toString` 主动隐藏 code，否则断言失败会把明文打进测试输出与堆栈。
@@ -381,6 +428,16 @@
   自身不发请求、不碰 Provider，页面拿到非空才调 Controller。候选人空时默认落
   `new_account` 模式（existing 模式无边可选，把用户丢在空列表前是最没必要的挫败）。
   两种模式控件互斥（`SegmentedButton`），避免「两组都填」造出自相矛盾的请求。
+- **但「输入型」表单是例外，要自带写操作**（`DictionaryEditorDialog`）：上面那条针对的是
+  **确认型**对话框；一旦输入是用户一个字一个字敲出来的，失败丢回页面 + 立刻关掉就等于他敲的
+  一屏因为一次网抖全没了。所以约定成：校验失败 / 网络失败**内联横幅展示并保持打开**，
+  只有**成功**与**乐观锁冲突**才关闭 —— 冲突时手里那个 version 已作废、重试必然再失败，
+  回列表看最新数据才是唯一正确动作。结果用 sealed 值交回页面
+  （`Saved` / `Conflict(failure)` / null=取消），不要用「可空 draft 兼职表达失败」。
+  配套：写操作在途时 `PopScope(canPop: false)` + 禁用取消按钮；页面在对话框开着时
+  **抑制自己的 SnackBar**（`_editorOpen` 判据），否则同一条错误说两遍、还会被对话框挡住。
+  判断「本次写失败」不用另开返回值：`_write` 开工时会 `clearFailure`，
+  所以 `await` 之后读到的非空 `state.failure` 一定是本次造成的。
 - **列表页按内容区宽度（`LayoutBuilder` 的 constraints）而非屏幕宽度切换卡片/表格**：
   宽屏左侧有导航栏，用屏幕宽度会让表格挤进一条比实际更窄的缝里。
 - **失败呈现分档**：已有数据时只弹 SnackBar（冲突附「刷新」动作），不把整张表/整页
@@ -391,6 +448,13 @@
   `Override` 必须从 `package:flutter_riverpod/misc.dart` 导入，主入口没有它。
   断言「提交中禁用」时请求挂在未完成的 `Completer` 上、只 `pump()` 一帧
   （按钮已换成 spinner，`pumpAndSettle` 会超时）。
+- **点下拉 / 菜单里的某一项要用 `find.text(label).last`**：`DropdownButton` 会把**所有**选项
+  都塞进按钮内部的 `IndexedStack`（未选中的那些仍在树里、`find` 一样命中得到 ——
+  `IndexedStack` 用的是 `Visibility(maintainSize: true)` 而**不是** `Offstage`，
+  所以 `skipOffstage` 拦不住），而弹出的菜单是走在 overlay 上的新路由、遍历顺序排在页面内容
+  之后 ⇒「刚弹出的那一项」永远是最后一个匹配。封装成 `_tapMenuItem(tester, label)` 复用。
+- **SnackBar 的 4 秒自动消失是真实定时器**：不把它跑完，用例会在收尾时报「还有定时器没结束」，
+  红在一个跟被测逻辑无关的地方。封装 `_settleSnackBar(tester)` = `pump(5s)` + `pumpAndSettle()`。
 - 后端 `ValidationErrors` 产出的 field 名就是契约里的 snake_case
   （`name` / `owner_username` / `owner_display_name` / `owner_temporary_password`），
   客户端可直接按契约字段名挂错误。
