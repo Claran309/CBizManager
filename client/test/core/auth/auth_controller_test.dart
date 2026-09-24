@@ -4,8 +4,10 @@ import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/auth_fixtures.dart';
+
 final class FakeControllerAuthRepository implements AuthRepository {
-  AuthSession session = const AuthSession(accessToken: 'access');
+  AuthSession session = ownerSession();
   Object? restoreError;
   Object? logoutError;
   var loginCalls = 0;

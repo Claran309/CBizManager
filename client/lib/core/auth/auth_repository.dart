@@ -19,14 +19,6 @@ abstract interface class AuthRemoteDataSource {
   Future<void> logout({required bool web, String? accessToken});
 }
 
-/// Profile fields that must be read from the server rather than inferred from
-/// an untrusted client-side token payload.
-final class AuthProfile {
-  const AuthProfile({required this.mustChangePassword});
-
-  final bool mustChangePassword;
-}
-
 abstract interface class AuthRepository {
   Future<AuthSession> login(String username, String password);
 
@@ -100,8 +92,8 @@ final class DefaultAuthRepository implements AuthRepository {
     accessTokens.accessToken = response.accessToken;
     return AuthSession(
       accessToken: response.accessToken,
+      profile: profile,
       accessExpiresAt: response.accessExpiresAt,
-      mustChangePassword: profile.mustChangePassword,
     );
   }
 }
@@ -156,26 +148,11 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
         headers: <String, Object?>{'Authorization': 'Bearer $accessToken'},
       ),
     );
-    final raw = response.data;
-    if (raw is! Map) {
-      throw const FormatException('Current-user response must be an object');
-    }
-    final envelope = ApiEnvelope<Map<String, Object?>>.fromJson(
-      Map<String, Object?>.from(raw),
-      (Object? value) {
-        if (value is! Map) {
-          throw const FormatException('Current-user data must be an object');
-        }
-        return Map<String, Object?>.from(value);
-      },
+    // 身份的唯一来源是服务端响应体。这里刻意不解析 access token 的 JWT 载荷：
+    // 那部分是客户端可读可改的，用它判定角色等于把权限交给攻击者。
+    return AuthProfile.fromJson(
+      _decodeEnvelopeData(response.data, 'Current-user response'),
     );
-    final mustChangePassword = envelope.data?['must_change_password'];
-    if (mustChangePassword is! bool) {
-      throw const FormatException(
-        'Current-user must_change_password is required',
-      );
-    }
-    return AuthProfile(mustChangePassword: mustChangePassword);
   }
 
   @override
@@ -208,23 +185,7 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
       data: body,
       options: options,
     );
-    final raw = response.data;
-    if (raw is! Map) {
-      throw const FormatException('Authentication response must be an object');
-    }
-    final envelope = ApiEnvelope<Map<String, Object?>>.fromJson(
-      Map<String, Object?>.from(raw),
-      (Object? value) {
-        if (value is! Map) {
-          throw const FormatException('Authentication data must be an object');
-        }
-        return Map<String, Object?>.from(value);
-      },
-    );
-    final data = envelope.data;
-    if (data == null) {
-      throw const FormatException('Authentication response data is required');
-    }
+    final data = _decodeEnvelopeData(response.data, 'Authentication response');
     final accessToken = data['access_token'];
     if (accessToken is! String || accessToken.isEmpty) {
       throw const FormatException(
@@ -237,6 +198,30 @@ final class DioAuthRemoteDataSource implements AuthRemoteDataSource {
       accessExpiresAt: _readDate(data['access_expires_at']),
       refreshExpiresAt: _readDate(data['refresh_expires_at']),
     );
+  }
+
+  /// 解出响应 Envelope 的 data 对象。
+  ///
+  /// 本项目所有接口都包在 `{code, message, data, request_id}` 里，且 `data`
+  /// 必须是对象；集中解析可以避免每个 endpoint 各写一遍、也避免各处漏校验。
+  Map<String, Object?> _decodeEnvelopeData(Object? raw, String label) {
+    if (raw is! Map) {
+      throw FormatException('$label must be an object');
+    }
+    final envelope = ApiEnvelope<Map<String, Object?>>.fromJson(
+      Map<String, Object?>.from(raw),
+      (Object? value) {
+        if (value is! Map) {
+          throw FormatException('$label data must be an object');
+        }
+        return Map<String, Object?>.from(value);
+      },
+    );
+    final data = envelope.data;
+    if (data == null) {
+      throw FormatException('$label data is required');
+    }
+    return data;
   }
 
   Options _webOptions({required bool requireCSRF}) {

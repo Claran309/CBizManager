@@ -6,6 +6,8 @@ import 'package:c_biz_docs_manager/core/auth/auth_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/auth_fixtures.dart';
+
 final class StaticAuthRepository implements AuthRepository {
   const StaticAuthRepository(this.session);
 
@@ -37,9 +39,9 @@ void main() {
   });
 
   test('password change is mandatory before authenticated app routes', () {
-    const state = AuthState(
+    final state = AuthState(
       AuthPhase.authenticated,
-      session: AuthSession(accessToken: 'access', mustChangePassword: true),
+      session: ownerSession(mustChangePassword: true),
     );
 
     expect(authRedirect(state, '/home'), '/change-password');
@@ -47,10 +49,7 @@ void main() {
   });
 
   test('normal authentication enters home and leaves home stable', () {
-    const state = AuthState(
-      AuthPhase.authenticated,
-      session: AuthSession(accessToken: 'access'),
-    );
+    final state = AuthState(AuthPhase.authenticated, session: ownerSession());
 
     expect(authRedirect(state, '/login'), '/home');
     expect(authRedirect(state, '/home'), isNull);
@@ -63,7 +62,7 @@ void main() {
       ProviderScope(
         overrides: [
           authRepositoryProvider.overrideWithValue(
-            const StaticAuthRepository(AuthSession(accessToken: 'access')),
+            StaticAuthRepository(ownerSession()),
           ),
         ],
         child: const CBizDocsApp(),

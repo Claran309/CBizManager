@@ -5,6 +5,8 @@ import 'package:c_biz_docs_manager/core/network/api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/auth_fixtures.dart';
+
 final class ControlledAdapter implements HttpClientAdapter {
   ControlledAdapter({required this.failRefresh});
 
@@ -61,7 +63,7 @@ void main() {
         refreshSession: () async {
           refreshes++;
           await Future<void>.delayed(const Duration(milliseconds: 10));
-          return AuthSession(accessToken: 'fresh');
+          return ownerSession(accessToken: 'fresh');
         },
         clearSession: () async => clears++,
       );
@@ -173,7 +175,7 @@ void main() {
         accessTokens: InMemoryAccessTokenStore(),
         refreshSession: () async {
           refreshes++;
-          return const AuthSession(accessToken: 'should-not-be-used');
+          return ownerSession(accessToken: 'should-not-be-used');
         },
         clearSession: () async => clears++,
       );

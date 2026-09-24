@@ -5,6 +5,8 @@ import 'package:c_biz_docs_manager/core/auth/web_credential_store.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/auth_fixtures.dart';
+
 final class RecordingAuthAdapter implements HttpClientAdapter {
   final List<RequestOptions> requests = <RequestOptions>[];
 
@@ -19,7 +21,13 @@ final class RecordingAuthAdapter implements HttpClientAdapter {
   ) async {
     requests.add(options);
     final responseBody = options.uri.path.endsWith('/me')
-        ? '''{"code":"OK","message":"success","data":{"must_change_password":true},"request_id":"request-1"}'''
+        ? '''{"code":"OK","message":"success","data":{
+             "user":{"id":11,"username":"owner","display_name":"Owner","account_type":"group_owner"},
+             "group":{"id":7,"name":"Finance"},
+             "member_type":"owner",
+             "must_change_password":true,
+             "permission_codes":[]
+           },"request_id":"request-1"}'''
         : '''{"code":"OK","message":"success","data":{"access_token":"access","refresh_token":"refresh","access_expires_at":"2026-07-24T19:00:00Z","refresh_expires_at":"2026-07-25T19:00:00Z"},"request_id":"request-1"}''';
     return ResponseBody.fromString(
       responseBody,
@@ -72,8 +80,10 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   var meCalls = 0;
   var logoutCalls = 0;
   Object? logoutError;
-  var mustChangePassword = true;
   String? receivedRefreshToken;
+
+  /// 服务端 `/auth/me` 的身份快照，默认与 [RecordingAuthAdapter] 的响应保持一致。
+  AuthProfile profile = ownerProfile(mustChangePassword: true);
   TokenResponse response = TokenResponse(
     accessToken: 'access',
     refreshToken: 'refresh',
@@ -109,7 +119,7 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
   @override
   Future<AuthProfile> me(String accessToken) async {
     meCalls++;
-    return AuthProfile(mustChangePassword: mustChangePassword);
+    return profile;
   }
 
   @override
@@ -123,6 +133,30 @@ final class FakeAuthRemoteDataSource implements AuthRemoteDataSource {
 }
 
 void main() {
+  test('登录后的会话携带服务端完整身份，而不是本地推断', () async {
+    final remote = FakeAuthRemoteDataSource();
+    final repository = DefaultAuthRepository(
+      remote: remote,
+      credentials: FakeCredentialStore(),
+      accessTokens: InMemoryAccessTokenStore(),
+      platform: AuthPlatform.native,
+    );
+
+    final session = await repository.login('user', 'password');
+
+    expect(session.profile.accountType, AccountType.groupOwner);
+    expect(session.profile.user.id, 11);
+    expect(session.profile.group?.id, 7);
+    expect(session.profile.memberType, MemberType.owner);
+    expect(session.profile.permissionCodes, isEmpty);
+    // 主账号隐式持有全部权限：契约规定其 permission_codes 固定为空数组，
+    // 权限只能靠 account_type 推导；漏掉这一步会把主账号当成无权限的普通成员。
+    expect(session.profile.hasPermission('settlement.approve'), isTrue);
+    // scopeKey 绑定 user/group/role/改密态/权限，供会话级 Provider 判断是否整体重建。
+    expect(session.scopeKey, '11:7:group_owner:owner:true:');
+    expect(remote.meCalls, 1);
+  });
+
   test('native login stores refresh token and restore rotates it', () async {
     final remote = FakeAuthRemoteDataSource();
     final credentials = FakeCredentialStore();
@@ -198,6 +232,11 @@ void main() {
         '/api/v1/auth/logout',
       ]);
       expect(profile.mustChangePassword, isTrue);
+      // 响应里的 access_token 只是一个普通字符串、并不是合法 JWT，
+      // 身份依旧解析成功 —— 反证客户端没有去解码令牌声明。
+      expect(profile.accountType, AccountType.groupOwner);
+      expect(profile.group?.id, 7);
+      expect(profile.permissionCodes, isEmpty);
       expect(
         adapter.requests[1].headers['Authorization'],
         'Bearer native-access',
