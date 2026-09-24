@@ -222,6 +222,15 @@
   否则 `AuthenticatedSessionScope.build` 当场抛 `Dio has not been configured`。
 - **改 `abstract interface class` 后立刻跑 `flutter analyze`**：`flutter test` 不一定先报
   漏实现（`non_abstract_class_inherits_abstract_member`），analyze 才会。
+- **客户端单据/结算/报表（尚未实施，计划已定）**：见
+  `docs/superpowers/plans/2026-09-24-flutter-documents-settlements-reports.md`（12 个 Task）。
+  三个必踩的口径坑（后端契约已定，客户端 fromJson 要对齐）：
+  1. 金额/单价/数量 JSON 一律**字符串**，客户端定点整数/BigInt、禁 double；
+     人民币大写信任服务端 `*_upper`，不自实现 rmb。
+  2. **单据列表行的 `business_user` 只回填 `id`+`display_name`**，`username`/`account_type`
+     可能缺失 ⇒ 列表行 fromJson 不能强校验这两个字段（结算/财务/报表里才是完整 UserSummary）。
+  3. 单据/结算/财务/报表的分页是**平铺** `items/page/page_size/total`，复用 `PageResult`
+     （区别于成员/字典那种嵌套 `pagination`）。
 ## Flutter 路由与守卫（client/lib/app/router.dart）
 
 - **12 条稳定路由**：`/splash` `/login` `/register` `/change-password`
