@@ -394,3 +394,36 @@
 - 后端 `ValidationErrors` 产出的 field 名就是契约里的 snake_case
   （`name` / `owner_username` / `owner_display_name` / `owner_temporary_password`），
   客户端可直接按契约字段名挂错误。
+- **导航目的地常量要公开共享，不要每页私有各写一份**：`memberDestinations` 由
+  `members_page.dart` 公开导出，权限页（`/members/:id/permissions`）复用同一份 ——
+  `ResponsiveScaffold` 靠「最长路径前缀」把下级页也算进「成员」这一项。
+  各页各写一份，将来加了第二项必然对不上。
+- **角色裁剪是两个不同的判定，别混**：
+  `canManageStatus = 组主账号 || hasPermission('member.manage')`（改状态）；
+  `canManagePermissions = accountType == groupOwner`（改权限）。
+  **把授权入口交给被管理者等于给他一条自己给自己提权的路**；判 `accountType` 而不是权限码，
+  因为 `hasPermission` 对 owner 恒真、判权限码会放行持码的普通成员。
+- **受保护行由共享的 `MemberRowActions.isProtected` 统一判定**，卡片与表格共用同一套规则
+  （各写一遍，用户切到宽屏就会看到不一样的入口）。保护两类：**组主账号**（停用他等于整个组
+  没人能管理）与**当前账号自己**（停用自己是不可逆自锁，下一请求就 401），
+  判定只认 `member.userId == profile.user.id`，**绝不用 username 比**（用户名可改，
+  改过之后「自己」那一行会突然认不出来，本该禁止的操作重新变得可点）。
+- **本地草稿（未提交的表单意图）不写回 Riverpod state**：权限替换页的 `_draft` 是
+  「还没提交的意图」，写回 `MemberState.permissions` 会让列表页也看到一份没保存的权限，
+  且「用户改主意了」无处安放。草稿**按 `version` 播种**（`_draftVersion` 不等才重播）：
+  保存成功 / 冲突后重读 / 换目标都会换 version，不重播就会拿过期基线去**整体替换**。
+  提交完整集合 + 快照里的 version（整体替换没有 version 就没有乐观锁）。
+  没有改动时要禁用保存按钮（白点一次就是一次无意义的乐观锁冲突来源）。
+- **「目录为空」不等于「目录之外」**：客户端不维护权限清单，`目录之外的权限码`（成员身上有、
+  目录里没有）必须保留在草稿里、可取消勾选 —— 因「目录里没写」就静默丢弃，等于让管理员在
+  毫不知情的情况下收回一项权限。但**只有拿到目录之后才谈得上「目录之外」**：
+  目录为空（加载中/失败）时每个码都会被算成「目录之外」，会凭空弹出一段误导说明，
+  所以渲染条件写成 `catalog.isNotEmpty && extraCodes.isNotEmpty`。
+- **一页有多个失败出口时要去重**：权限页的三个出口 —— 无快照交给 `AsyncStateView` 整页呈现、
+  目录为空由正文里那张「权限目录加载失败」卡片承担（自带重试）、其余才飘 SnackBar
+  （冲突附「重新加载」动作）。判据 `shownInline = !hasSnapshotNow || catalog.isEmpty`，
+  再配合 `!identical(failure, previous?.failure)`。**409 只重读 + 保留提示，绝不自动重提** ——
+  替用户重提等于替他做了一个他并不知道自己在做的决定，而整体覆盖的代价很大。
+- **同类页面的 `parseXxxId` / `xxxRedirect` 共用一套判定但保留两个具名函数**：
+  `parseMembershipId` 与 `parseGroupId` 都转发 `_parsePositiveId`（正整数、下界 1），
+  调用点读出来就是「成员编号」「组编号」——读错语义时没人拦得住你。
