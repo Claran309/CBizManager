@@ -327,6 +327,20 @@
   「判空的是 key 变量、值表达式本身非空」（如 `'status': status.wireValue`）**不能**换 `?`，
   这种情况保持 `if (x != null)` 写法。发可选字段的空 body 要发 `{}` 而非 null（服务端
   `ShouldBindJSON` 在空 body 上报 EOF）。
+- **绝不在 `State.dispose()` 里同步改 Riverpod 状态**：那一刻本 Element 已进入 defunct
+  状态，Riverpod 把新 state 推给订阅者时会 `markNeedsBuild` → 撞
+  `_lifecycleState != _ElementLifecycle.defunct` 断言（线上同样会抛，不只是测试问题）。
+  要做「离开页面就清掉」的状态（邀请码明文就是），写成
+  `scheduleMicrotask(controller.clearSecret);` —— 推到下一个微任务，等卸载流程走完、
+  订阅已摘掉再清，那次改动只落在状态里、不触发 build。
+  另外要记住：会话作用域里的 provider 是**非 autoDispose** 的（要跨页面复用），
+  所以「路由离开」不会销毁 Controller，`ref.onDispose` 只是作用域销毁时的兜底，
+  **页面侧必须自己显式清一次**。
+- **页面测试里断言「某个 widget 不在」要当心空态退化**：像 `InvitationSecretPanel`
+  在没有明文时 build 出 `SizedBox.shrink()`，但 widget 本身仍在树上，
+  `find.byType(X), findsNothing` 永远失败。判据换成「它渲染的那句话还在不在」。
+  同理 `find.byTooltip` 命中的是 `Tooltip` 而不是 `IconButton`（取按钮用
+  `find.widgetWithIcon`），`find.textContaining` 会同时命中列表与弹层（用 `descendant` 收窄）。
 
 ## Flutter 页面层约定（client/lib/features/*/presentation/）
 
