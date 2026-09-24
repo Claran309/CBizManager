@@ -103,10 +103,13 @@ Future<ProviderContainer> _pumpApp(
 
 /// 打开某个下拉并点它的某一项。
 ///
-/// 用 `.last` 而不是「唯一匹配」：`DropdownButton` 会把**所有**选项都塞进按钮
-/// 内部的 `IndexedStack`（未选中的那些仍在树里，find 一样命中得到），
-/// 而弹出的菜单是走在 overlay 上的新路由、遍历顺序排在页面内容之后 ——
-/// 所以「刚弹出的那一项」永远是最后一个。
+/// 用 `.last` 而不是「唯一匹配」：下拉**打开后**，按钮自己显示的那一项（当前值）
+/// 会和菜单里的同一项一起命中 `find.text(label)`，唯一匹配的写法会直接
+/// `Found 2 widgets` 报错。实测一个初始值为 `A`、选项为 `A`/`B` 的下拉：
+/// 关闭态 `A=1 / B=0`，打开态 `A=2 / B=1` —— 也就是说会撞上重复的只有
+/// 「点回当前已选中的那一项」，点其它项仍然只有一个匹配。
+/// 而弹出的菜单走在 overlay 上的新路由、遍历顺序排在页面内容之后，
+/// 所以「刚弹出的那一项」永远是最后一个匹配，`.last` 在两种场景下都对。
 Future<void> _tapMenuItem(WidgetTester tester, String label) async {
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
@@ -119,10 +122,11 @@ Future<void> _selectKind(WidgetTester tester, DictionaryKind kind) async {
   await _tapMenuItem(tester, kind.label);
 }
 
-/// 吞掉 SnackBar 的自动关闭定时器。
+/// 把 SnackBar 的自动关闭定时器跑完（**可选清理**，不是必需项）。
 ///
-/// SnackBar 4 秒后自己消失，那是个**真实定时器**：不把它跑完，
-/// 用例会在收尾时报「还有定时器没结束」，红在一个跟被测逻辑无关的地方。
+/// SnackBar 4 秒后自己消失，那确实是个真实定时器；但实测表明**不等它跑完
+/// 用例也不会变红**（收尾不会报「还有定时器没结束」）。留着它是为了让用例
+/// 在「屏幕上什么都不剩」的干净状态下结束，属于防御性清理。
 Future<void> _settleSnackBar(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 5));
   await tester.pumpAndSettle();

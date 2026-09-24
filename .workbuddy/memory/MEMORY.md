@@ -448,13 +448,16 @@
   `Override` 必须从 `package:flutter_riverpod/misc.dart` 导入，主入口没有它。
   断言「提交中禁用」时请求挂在未完成的 `Completer` 上、只 `pump()` 一帧
   （按钮已换成 spinner，`pumpAndSettle` 会超时）。
-- **点下拉 / 菜单里的某一项要用 `find.text(label).last`**：`DropdownButton` 会把**所有**选项
-  都塞进按钮内部的 `IndexedStack`（未选中的那些仍在树里、`find` 一样命中得到 ——
-  `IndexedStack` 用的是 `Visibility(maintainSize: true)` 而**不是** `Offstage`，
-  所以 `skipOffstage` 拦不住），而弹出的菜单是走在 overlay 上的新路由、遍历顺序排在页面内容
-  之后 ⇒「刚弹出的那一项」永远是最后一个匹配。封装成 `_tapMenuItem(tester, label)` 复用。
-- **SnackBar 的 4 秒自动消失是真实定时器**：不把它跑完，用例会在收尾时报「还有定时器没结束」，
-  红在一个跟被测逻辑无关的地方。封装 `_settleSnackBar(tester)` = `pump(5s)` + `pumpAndSettle()`。
+- **点下拉 / 菜单里的某一项要用 `find.text(label).last`**：下拉**打开后**，按钮自己显示的
+  那一项（当前值）会与菜单里的同一项一起命中 `find.text(label)`，唯一匹配的写法直接
+  `Found 2 widgets` 报错。实测（初始值 `A`、选项 `A`/`B`）：关闭态 `A=1 / B=0`，
+  打开态 `A=2 / B=1` —— 未选中项在关闭态**找不到**，会撞重复的只有「点回当前已选中的那一项」，
+  点其它项仍只有一个匹配。菜单走在 overlay 上的新路由、遍历排在页面内容之后，
+  所以 `.last` 在两种场景下都取到菜单项。封装成 `_tapMenuItem(tester, label)` 复用。
+  （纠错：曾有「`DropdownButton` 把所有选项塞进 `IndexedStack`、未选中项也命中」的说法，实测不成立。）
+- **SnackBar 的 4 秒定时器不需要在用例里跑完**：实测「弹完 SnackBar 直接结束用例」不会报
+  「还有定时器没结束」，收尾不会因此变红。`_settleSnackBar`（`pump(5s)` + `pumpAndSettle()`）
+  是可选的防御性清理，不是必需项。（纠错：曾误记成必需。）
 - 后端 `ValidationErrors` 产出的 field 名就是契约里的 snake_case
   （`name` / `owner_username` / `owner_display_name` / `owner_temporary_password`），
   客户端可直接按契约字段名挂错误。
