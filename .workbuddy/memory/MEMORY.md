@@ -54,6 +54,15 @@
 - **脱敏**：银行卡只存卡号后 4 位（`card_tail CHAR(4)`），完整卡号一律不落库。
 - **时间戳用注入时钟**：仓储创建行时显式写 `created_at/updated_at = input.Now`，
   不要让 GORM 取墙上时间——否则「按 created_at 过滤月份」会与按注入时钟生成的单号月份错位。
+  **每个写路径都必须传 `Now`，幂等记录与审计记录同样要**：漏传会落零值日期，MySQL 严格模式直接
+  `Error 1292: Incorrect datetime value '0000-00-00'` 拒绝写入（SQLite 容忍，单测查不出来）。
+  document 模块的 `Service.Create` / `Update` 就漏了，是真跑集成测试才抓到的。
+- **邀请码与组治理（organization / platform）**：邀请码状态 `active/used/revoked/expired`，
+  **撤销是幂等的**（对已撤销的再撤销静默成功并返回 revoked，不报错——设计文档明确写了「撤销幂等」）；
+  查看明文在 used/expired/revoked 后返回 `INVITATION_NOT_REVEALABLE`。
+  **owner 交接后旧主账号降级为 member 且 `status=disabled`（停用）**，权限记录被清空，两人刷新会话都撤销；
+  停用账号登录统一返回 `AUTH_INVALID_CREDENTIALS`（防账号枚举，不是 `AUTH_ACCESS_INACTIVE`）。
+  组启停：目标状态与当前一致时幂等成功且**不涨 version**。
 - **审计**：写 `audit_logs`（`group_id/operator_user_id/action/resource_type/resource_id/summary/created_at`），
   摘要由仓储在拿到单号后统一拼装。
 - **汇总统计（reporting）特有口径**：
@@ -66,6 +75,21 @@
   - **快照即冻结**：`report_snapshots` 与 `settlements` 分开两张表（快照无审批流、不占用源单据）；
     快照无 `version` 列、无修改接口，要更正只能重新生成。业务员姓名随快照冻结落库。
   - 单号 `ZJS + YYYYMM + -4位当月序号`；**批次号取本批第一张快照的单号**；**审计逐张写**（不是整批一条）。
+
+## GORM / MySQL 方言坑（SQLite 单测查不出，必须真跑 MySQL）
+
+- **`groups` 是 MySQL 8.0 保留字**（窗口函数的 `GROUPS` 帧单位）。GORM `Table()` 有两条分支：
+  - 传**不含空格/反引号**的纯表名 → 走标识符引用路径，自动加反引号并正确设置 `Statement.Table`。
+    实测 `Table("groups")` + `First()` → ``FROM `groups` WHERE id = ? ORDER BY `groups`.`id` LIMIT ?`` ✅
+  - 传**含空格或反引号**的串 → 当原样 SQL 输出、**不做任何转义**：`Table("groups AS g")` 直接
+    `Error 1064`，必须手写 `Table("`groups` AS g")`。
+  - **陷阱**：带别名的写法会让 `Statement.Table` 落空，所以**只有后续用 `Count`/`Scan`
+    （不依赖 `Statement.Table`）时才可手写反引号**；若配 `First()` 手写反引号会拼出
+    ``ORDER BY `.`id`` 的语法错误——那种情况保持 `Table("groups")` 原样交给 GORM。
+- **`Scan(&[]SomeDTO)` 的 DTO 不能带嵌套结构体字段**：GORM 会当成关联关系解析并报
+  `invalid field found for struct ...: define a valid foreign key for relations`。
+  做法：先用扁平的匿名行结构体接住结果，再手工组装成 DTO（`platform.GetGroupDetail` 踩过）。
+- 其余已知差异：`DATETIME(6)` 只到微秒（纳秒时钟读回会截断）；DECIMAL 在 SQLite 会以 REAL 落库。
 
 ## 环境坑（本机 / 本会话实测）
 
@@ -87,11 +111,16 @@
   但随后 `git show-ref` 里**看不到** `refs/remotes/origin/main`，`git branch -vv` 会显示
   `[origin/main: gone]`。这是显示残留、**不代表远端丢提交**。核对是否已推送请用
   `git ls-remote origin refs/heads/main` 与本地 `git rev-parse HEAD` 直接比对哈希。
-- 本机 **Docker 完全不可用**（不只是引擎未启动）：`Get-Command docker` 与 `com.docker.service` 都查不到，
-  所以 `go test -tags integration` 一律门控 SKIP。
-  **替代验证手段**：集成测试里手算的期望值，可以在被测包内临时写一个只跑纯函数 / 纯聚合的测试文件，
-  用同一批数据喂真实函数逐项比对（如 reporting 用 `newPeriodTotals` / `buildOverviewData` 复核
-  毛利率与三类占比），通过后删除临时文件。DB 方言层（DECIMAL 回读、聚合排序、序号生成）仍需真 MySQL 才能覆盖。
+- **Docker 可用性会变，每次先 `docker ps` 实测，不要照搬历史结论**。2026-09-23 之前本机 Docker
+  完全不可用（`docker` 命令与 `com.docker.service` 都查不到），`-tags integration` 一律门控 SKIP；
+  2026-09-24 主人启动后容器 `MySQL`（3306）已 healthy，7 个集成测试**首次真跑**并一次抓出
+  4 个只在真实方言下才犯的错（保留字未转义、嵌套 struct 误判关联、零值日期、微秒截断）。
+- **真跑集成测试的方法**：`.workbuddy/tmp/run_integration.py` —— 等 3306 就绪 → 从
+  `docker inspect MySQL` 读 `MYSQL_ROOT_PASSWORD`（脱敏，不落盘不打印）→ 给子进程注入
+  `TEST_MYSQL_DSN=root:<pwd>@tcp(127.0.0.1:3306)/?charset=utf8mb4` → 跑 go test，可带 `-run` 正则。
+- Docker 不可用时的**替代验证手段**：在薄弱包内临时写只跑纯函数 / 纯聚合的测试，用同一批数据喂真实函数
+  逐项比对（如 reporting 用 `newPeriodTotals` / `buildOverviewData` 复核毛利率与占比），通过后删除临时文件。
+  但它**覆盖不到 DB 方言层**，凡涉及 SQL 的改动最终必须真跑 MySQL。
 - 集成测试夹具易错点：出库单**提交时必须带 `sale_amount_type`**（否则 `DOCUMENT_INCOMPLETE`），
   共享 helper 造出库单别漏这个字段。
 - 集成测试断言易错点：`created_at` 列是 `DATETIME(6)`（微秒），而代码里用的是纳秒时钟，
