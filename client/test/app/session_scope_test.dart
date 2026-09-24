@@ -8,6 +8,7 @@ import 'package:c_biz_docs_manager/features/dictionaries/domain/dictionary_entry
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
 import 'package:c_biz_docs_manager/features/members/domain/member.dart';
+import 'package:c_biz_docs_manager/features/platform/data/platform_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` / `ProviderException` 这两个类型名在 Riverpod 3 里被挪进了 misc.dart，
@@ -103,7 +104,7 @@ void main() {
     expect(otherScope.read(dictionaryControllerProvider).items, isEmpty);
   });
 
-  test('平台管理员不装配任何租户 Repository', () {
+  test('平台管理员只装配平台治理仓储，不装配任何租户 Repository', () {
     final scope = ProviderContainer(
       parent: app,
       overrides: overridesFor(platformAdminSession()),
@@ -114,9 +115,24 @@ void main() {
       scope.read(activeSessionProvider).profile.accountType,
       AccountType.platformAdmin,
     );
+    // 平台治理是他的本职工作，必须装配；而且它不需要 userId / groupId，
+    // 看的是全平台的组，所以这里没有「范围收敛」可言。
+    expect(scope.read(platformRepositoryProvider), isA<DioPlatformRepository>());
     // 「未装配」意味着读取立刻抛错，而不是悄悄退化成某个能读到别组数据的默认实现。
     expect(() => scope.read(memberRepositoryProvider), _throwsStateError);
     expect(() => scope.read(dictionaryRepositoryProvider), _throwsStateError);
+  });
+
+  test('租户会话读不到平台治理仓储', () {
+    final scope = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(ownerSession()),
+    );
+    addTearDown(scope.dispose);
+
+    // 租户侧的管理界面进不去（路由守卫挡了），但装配层再挡一道：
+    // 否则将来某处误读一下，就能拿到全平台所有组的列表。
+    expect(() => scope.read(platformRepositoryProvider), _throwsStateError);
   });
 
   test('租户会话缺少 group 时装配直接抛错', () {

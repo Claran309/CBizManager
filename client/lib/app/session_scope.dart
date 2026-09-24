@@ -4,6 +4,7 @@ import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_
 import 'package:c_biz_docs_manager/features/dictionaries/data/dictionary_repository.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
+import 'package:c_biz_docs_manager/features/platform/data/platform_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,8 +76,11 @@ final activeSessionProvider = Provider<AuthSession>((Ref ref) {
 ///
 /// 约定：
 /// - `activeSessionProvider` 永远被覆盖成 [session]；
-/// - 平台管理员**只**覆盖它：不装配任何租户 Repository，读取即抛错；
+/// - 平台管理员**只**装配平台治理仓储：它是跨组视角，没有租户数据可读，
+///   任何租户 Repository 的读取都会当场抛错；
 /// - 租户身份必须带 group，否则立刻抛错（绝不允许退化成 `groupId = 0`）；
+/// - 租户**不**装配平台治理仓储：那是平台管理员的战场，路由守卫已经挡住了
+///   界面入口，装配层再挡一道，防止将来有人从别处误读全平台的组；
 /// - Repository 的 `userId` / `groupId` 取自**服务端返回的 profile**，
 ///   不取自本地缓存的旧值——本地缓存恰恰是最可能过期的那一份。
 ///
@@ -106,10 +110,18 @@ List<Override> _sessionOverrides({
 
   final profile = session.profile;
   if (profile.accountType == AccountType.platformAdmin) {
-    // 平台管理员不属于任何组，没有成员、字典这类租户数据可读。
-    // 这里刻意**不**注册任何兜底实现：管理端界面一旦误读租户 Repository
+    // 平台管理员不属于任何组，没有成员、字典这类租户数据可读，
+    // 这里刻意**不**注册任何租户兜底实现：管理端界面一旦误读租户 Repository
     // 就会当场炸出来，而不是悄悄读到一个"默认组"的跨组数据。
-    return overrides;
+    //
+    // 但平台治理本身是他的本职工作，所以必须装配 —— 而且只装配这一个：
+    // 它不需要 userId / groupId（看的是全平台的组），天然就没有数据范围可收敛。
+    return <Override>[
+      ...overrides,
+      platformRepositoryProvider.overrideWithValue(
+        DioPlatformRepository(appDio),
+      ),
+    ];
   }
 
   final group = profile.group;
