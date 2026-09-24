@@ -34,6 +34,7 @@ const double kResponsiveScaffoldBreakpoint = 720;
 ///   —— 拇指可达，单手能用。
 /// - 宽屏（>= 断点）：`Scaffold + AppBar + NavigationRail | VerticalDivider | body`
 ///   —— 导航常驻侧边，正文拿到整块高度，适合后台长时间操作。
+/// - [destinations] 少于 2 项时不渲染导航，退化成一块普通内容区（见 [build]）。
 ///
 /// 内容（[body]）本身不在这里做裁剪：设计上要求「不把桌面表格硬塞进手机」，
 /// 那是各页面自己的责任，壳只负责给它多少空间。
@@ -76,13 +77,19 @@ final class ResponsiveScaffold extends StatelessWidget {
       '没有 tooltip 就等于没有无障碍名称。',
     );
 
-    final selectedIndex = _resolveSelectedIndex();
+    // 只有一个目的地时不渲染任何导航。两个原因：
+    // 一是「导航」的全部意义在于切换，只有一个目的地的导航栏是纯占位；
+    // 二是框架不允许 —— `NavigationBar` 带 `destinations.length >= 2` 的断言，
+    // 照常渲染会直接崩（平台管理员目前只有「组管理」一个功能，正是这种情形）。
+    final hasNavigation = destinations.length >= 2;
+    final selectedIndex = hasNavigation ? _resolveSelectedIndex() : null;
     final isWide =
         MediaQuery.sizeOf(context).width >= kResponsiveScaffoldBreakpoint;
+    final showRail = hasNavigation && isWide;
 
     return Scaffold(
       appBar: AppBar(title: Text(title), actions: actions),
-      body: isWide
+      body: showRail
           ? Row(
               children: <Widget>[
                 NavigationRail(
@@ -107,9 +114,8 @@ final class ResponsiveScaffold extends StatelessWidget {
               ],
             )
           : body,
-      bottomNavigationBar: isWide
-          ? null
-          : NavigationBar(
+      bottomNavigationBar: (hasNavigation && !isWide)
+          ? NavigationBar(
               // NavigationBar 的 selectedIndex 是非空 int 且带范围断言，
               // 传不了「无选中」；这里退回 0 只是为了让断言不炸，
               // 实际上每个用本壳的页面都至少会命中自己的列表页。
@@ -124,7 +130,8 @@ final class ResponsiveScaffold extends StatelessWidget {
                     tooltip: destination.label,
                   ),
               ],
-            ),
+            )
+          : null,
     );
   }
 

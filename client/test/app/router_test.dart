@@ -450,6 +450,37 @@ void main() {
     );
   });
 
+  /* ------------------------------------------------- 组详情地址的解析 */
+
+  group('平台组详情地址', () {
+    test('正整数编号原样进入详情', () {
+      expect(parseGroupId('42'), 42);
+      expect(groupDetailRedirect('42'), isNull);
+    });
+
+    test('非法编号一律回列表并带提示，而不是拿假 ID 去请求', () {
+      // 空串与 'abc' 来自手改地址栏；'0' 与 '-1' 违反契约的 minimum: 1；
+      // '1.5' 与 '12a' 是 tryParse 应当拒绝的半吊子数字。
+      for (final raw in <String?>[
+        null,
+        '',
+        '   ',
+        'abc',
+        '0',
+        '-1',
+        '1.5',
+        '12a',
+      ]) {
+        expect(parseGroupId(raw), isNull, reason: '「$raw」不应被当成合法组编号');
+        expect(
+          groupDetailRedirect(raw),
+          '/platform/groups?notice=invalid_group_id',
+          reason: '「$raw」应当被送回组列表',
+        );
+      }
+    });
+  });
+
   /* ------------------------------------------------------ 真实路由器闭环 */
 
   group('真实 GoRouter 闭环', () {

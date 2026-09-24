@@ -128,6 +128,31 @@ String? authRedirect(AuthState auth, String location) {
 
 /* ------------------------------------------------------------------ 路由表 */
 
+/// 解析 `/platform/groups/:groupId` 里的组编号。
+///
+/// 返回 null 表示地址里的编号非法。调用方负责把用户送回组列表并提示，
+/// 而不是让详情页带着一个假 ID 去请求 —— 那样只会拿到一个 404，
+/// 外加一条完全没法指导下一步的提示。
+///
+/// 下界判 1 而不是 0：契约里 `group_id` 标了 `minimum: 1`，
+/// 0 与负数都不是合法编号。
+int? parseGroupId(String? raw) {
+  if (raw == null) return null;
+  final value = int.tryParse(raw);
+  if (value == null || value < 1) return null;
+  return value;
+}
+
+/// 组详情地址的跳转决策：编号非法就回列表并带上提示，合法则留在原地。
+///
+/// 单独抽成一个纯函数，是为了让「非法编号会去哪」这件事能被直接断言 ——
+/// 在 `redirect` 回调里构造一个 `GoRouterState` 只为了测一个 if，
+/// 会让人宁可不测。
+String? groupDetailRedirect(String? rawGroupId) =>
+    parseGroupId(rawGroupId) == null
+    ? '/platform/groups?notice=invalid_group_id'
+    : null;
+
 final routerProvider = Provider<GoRouter>((Ref ref) {
   final refresh = _AuthRouterRefresh(ref);
   ref.onDispose(refresh.dispose);
@@ -163,7 +188,12 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
       GoRoute(
         path: '/platform/groups',
         builder: (BuildContext context, GoRouterState state) =>
-            const PlatformGroupsPage(),
+            PlatformGroupsPage(
+              // 提示由地址上的 query 参数带进来：这样「/platform/groups/abc
+              // 跳回列表」之后地址栏和用户看到的内容是一致的 —— 用页面内
+              // 的临时状态做提示，会让地址停在 `/abc` 上而内容却是列表。
+              notice: state.uri.queryParameters['notice'],
+            ),
       ),
       GoRoute(
         path: '/platform/groups/new',
@@ -172,8 +202,20 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
       ),
       GoRoute(
         path: '/platform/groups/:groupId',
+        // 编号非法时**重定向**而不是在 builder 里渲染列表页：builder 期间
+        // 调 go() 会撞上「构建过程中改路由」的断言，而 redirect 是框架
+        // 明确支持的地址改写时机。
+        redirect: (BuildContext context, GoRouterState state) =>
+            groupDetailRedirect(state.pathParameters['groupId']),
         builder: (BuildContext context, GoRouterState state) =>
-            const PlatformGroupDetailPage(),
+            PlatformGroupDetailPage(
+              // redirect 已经挡掉非法编号，类型系统却不知道，所以这里再解析
+              // 一次；真拿到 null 说明 redirect 与 builder 的判断不一致，
+              // 用 0 兜底会让详情页请求 `/groups/0` 并得到一个明确的 404，
+              // 比在路由层抛异常更容易定位。
+              groupId: parseGroupId(state.pathParameters['groupId']) ?? 0,
+              key: ValueKey<String>('group-${state.pathParameters['groupId']}'),
+            ),
       ),
       GoRoute(
         path: '/home',

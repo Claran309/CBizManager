@@ -287,4 +287,66 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('导航项不足两项时退化为无导航', () {
+    // 平台管理员目前只有「组管理」一个功能。若照常渲染，`NavigationBar` 会因
+    // `destinations.length >= 2` 的断言直接崩掉 —— 这个退化分支必须有测试守着，
+    // 否则将来有人「顺手」把判断去掉，问题要到点开平台管理页才会暴露。
+    const single = <AppDestination>[
+      AppDestination(
+        label: '组管理',
+        icon: Icons.business_outlined,
+        route: '/platform/groups',
+      ),
+    ];
+
+    Widget singleShell() => const ResponsiveScaffold(
+      title: '平台组管理',
+      destinations: single,
+      currentRoute: '/platform/groups',
+      body: Text('正文'),
+    );
+
+    testWidgets('窄屏既没有 NavigationBar 也没有 NavigationRail', (
+      WidgetTester tester,
+    ) async {
+      _setScreenSize(tester, const Size(390, 844));
+
+      await tester.pumpWidget(MaterialApp(home: singleShell()));
+
+      expect(find.byType(AppBar), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byType(NavigationRail), findsNothing);
+      // 内容本身照常渲染：退化的只是导航，不是整块内容区。
+      expect(find.text('正文'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('宽屏同样不渲染 NavigationRail', (WidgetTester tester) async {
+      _setScreenSize(tester, const Size(1280, 800));
+
+      await tester.pumpWidget(MaterialApp(home: singleShell()));
+
+      expect(find.byType(NavigationRail), findsNothing);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.text('正文'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('一个目的地都没有也不崩', (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: ResponsiveScaffold(
+            title: '空',
+            destinations: <AppDestination>[],
+            currentRoute: '/nothing',
+            body: Text('正文'),
+          ),
+        ),
+      );
+
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
