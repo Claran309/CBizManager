@@ -194,6 +194,13 @@
     `d:/CodeStudy/ProjectF/`**（项目从 ProjectF 搬到了 CBizDocsManager），CMake 报
     `source does not match`。修法：删 `client/build/windows/` 重建（build 在 gitignore 里，无损）。
   - Web 构建不依赖上述任何一点，✅ 直接成功。
+- **⚠️ D 盘长期处于「满」的边缘（2026-09-24 实测被顶爆）**：跑测试撞
+  `ENOSPC: no space left on device`，D 盘物理只剩 1.6MB。大头全是主人个人数据
+  （SteamLibrary 22GB、CodeStudy 29GB、WeChat Files 13GB、QQ 10GB、Temp 7GB 等）。
+  Android/Windows 构建会生成 2GB+ 中间产物（`client/build/app` 就近 2GB），很容易顶爆。
+  **教训**：① 跑构建前先 `Get-PSDrive D` 探剩余；② `client/build/` 是再生缓存、可安全删
+  （等价 flutter clean）；③ 个人文件（Steam/微信/QQ/网盘）**绝不动**，清理需主人决定；
+  ④ 建议主人把 Gradle/构建缓存挪到 C 盘（还有 54GB）。本次已清 `client/build` 腾出 2GB。
 
 ## Flutter 客户端（client/）既有约定与坑
 
@@ -231,6 +238,13 @@
      可能缺失 ⇒ 列表行 fromJson 不能强校验这两个字段（结算/财务/报表里才是完整 UserSummary）。
   3. 单据/结算/财务/报表的分页是**平铺** `items/page/page_size/total`，复用 `PageResult`
      （区别于成员/字典那种嵌套 `pagination`）。
+- **客户端定点金额/日期工具已就绪（Task 1 交付，`aeb6b72`）**：
+  - `core/money/money.dart`：`Amount`(分/scale2)、`UnitPrice`(万分之一元/scale4)、
+    `Quantity`(千分之一/scale3)，不可互换、内部 BigInt、禁 double；`Amount.mul` 对齐后端
+    `money.Mul`（余数×2>=除数进位、负数向负）。
+  - `core/bizdate/bizdate.dart`：`parseDate` 兼容 5 种写法+回读校验、`parseMonth` 只收
+    `YYYY-MM`（月份不补零）、`formatMonth`/`formatMonthCompact`。
+  新模块（单据/结算/财务/报表）一律用这两个包，不要再各写一套。
 ## Flutter 路由与守卫（client/lib/app/router.dart）
 
 - **12 条稳定路由**：`/splash` `/login` `/register` `/change-password`
