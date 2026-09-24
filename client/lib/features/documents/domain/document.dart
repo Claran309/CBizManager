@@ -342,6 +342,116 @@ final class DocumentDetail {
   );
 }
 
+/* --------------------------------------------------------- 查询与写入草稿 */
+
+/// 单据列表查询条件。
+///
+/// 全部可选（除分页），「有才带」：查询时不筛的字段不拼进 query，
+/// 避免显式传 null 被序列化成空串、被服务端按非法枚举拒绝。
+final class DocumentQuery {
+  const DocumentQuery({
+    this.status,
+    this.keyword,
+    this.month,
+    this.businessUserId,
+    this.dateFrom,
+    this.dateTo,
+    this.page = 1,
+    this.pageSize = 20,
+  });
+
+  final DocumentStatus? status;
+
+  /// 同时匹配单号与往来单位名。
+  final String? keyword;
+
+  /// 形如 `2026-09` 的业务月份。
+  final String? month;
+  final int? businessUserId;
+  final String? dateFrom;
+  final String? dateTo;
+  final int page;
+  final int pageSize;
+}
+
+/// 明细写入草稿。
+///
+/// 数量 / 单价是**字符串**（客户端只做输入校验，不做金额计算；金额由服务端按
+/// 单价×数量 算出）。提交时原样发字符串，与后端「金额字段 JSON 一律字符串」一致。
+final class ItemDraft {
+  const ItemDraft({
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.priceTaxMode,
+    this.productModel,
+    this.unit,
+    this.weight,
+    this.remark,
+  });
+
+  final String productName;
+  final String? productModel;
+  final String? unit;
+
+  /// 数量，十进制字符串（如 `"17.050"`）。
+  final String quantity;
+
+  /// 重量，可选，十进制字符串。
+  final String? weight;
+
+  /// 单价，十进制字符串（如 `"2975.4300"`）。
+  final String unitPrice;
+  final PriceTaxMode priceTaxMode;
+  final String? remark;
+}
+
+/// 往来单位写入草稿（入库=进项公司，出库=客户）。
+final class PartyDraft {
+  const PartyDraft({
+    required this.partyName,
+    required this.items,
+    this.contactPhone,
+    this.dictionaryEntryId,
+  });
+
+  final String partyName;
+  final String? contactPhone;
+  final int? dictionaryEntryId;
+  final List<ItemDraft> items;
+}
+
+/// 创建 / 整体替换单据的写入草稿。
+///
+/// 没有 `kind`（由仓储构造参数决定）也没有 `amount`（服务端算）。
+final class DocumentDraft {
+  const DocumentDraft({
+    required this.status,
+    required this.businessDate,
+    required this.parties,
+    this.businessUserId,
+    this.shippingUnit,
+    this.saleAmountType,
+    this.remark,
+  });
+
+  final DocumentStatus status;
+
+  /// 业务日期，形如 `2026-09-22`（由表单层用 bizdate 解析后再拼回）。
+  final String businessDate;
+
+  /// 缺省时由服务端取当前用户。
+  final int? businessUserId;
+
+  /// 运输单位，仅出库单；入库单不填。
+  final String? shippingUnit;
+
+  /// 销售金额类型，仅出库单；提交时必填。
+  final SaleAmountType? saleAmountType;
+  final String? remark;
+  final List<PartyDraft> parties;
+}
+
 /* --------------------------------------------------------- 严格解析辅助 */
 
 Map<String, Object?> _readObject(Map<String, Object?> json, String key) {
