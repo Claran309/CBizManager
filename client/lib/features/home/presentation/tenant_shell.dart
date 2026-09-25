@@ -22,6 +22,8 @@ List<AppDestination> tenantDestinations(AuthProfile? profile) {
     // 入库/出库单据是业务员日常填写的核心，所有租户用户都要能进。
     _inboundDestination,
     _outboundDestination,
+    // 结算单：业务员申请自己的、审批人看全组（数据范围后端收敛），恒在。
+    _settlementsDestination,
     // 邀请码决定「谁能进这个组」，只有组主账号该看见它。
     // 守卫里的 owner-only 规则负责最终裁决，这里只负责不给普通成员一个
     // 「点了会被弹回首页」的假入口。
@@ -53,6 +55,12 @@ const AppDestination _outboundDestination = AppDestination(
   label: '出库单',
   icon: Icons.local_shipping_outlined,
   route: '/documents/outbound',
+);
+
+const AppDestination _settlementsDestination = AppDestination(
+  label: '结算单',
+  icon: Icons.receipt_long_outlined,
+  route: '/settlements',
 );
 
 const AppDestination _invitationsDestination = AppDestination(

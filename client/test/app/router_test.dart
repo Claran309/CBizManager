@@ -448,6 +448,8 @@ void main() {
         '/documents/outbound/new',
         '/documents/inbound/:documentId',
         '/documents/outbound/:documentId',
+        '/settlements',
+        '/settlements/:settlementId',
       ]),
     );
     // `/platform/groups/new` 会被 `/platform/groups/:groupId` 一并匹配，

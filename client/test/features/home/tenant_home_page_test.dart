@@ -21,11 +21,12 @@ void main() {
   /* -------------------------------------------------------- 导航裁剪 */
 
   group('租户导航裁剪', () {
-    test('组主账号得到 首页 / 入库单 / 出库单 / 邀请码 / 成员 / 字典', () {
+    test('组主账号得到 首页 / 入库单 / 出库单 / 结算单 / 邀请码 / 成员 / 字典', () {
       expect(_routesOf(ownerProfile()), <String>[
         '/home',
         '/documents/inbound',
         '/documents/outbound',
+        '/settlements',
         '/invitations',
         '/members',
         '/dictionaries',
@@ -34,6 +35,7 @@ void main() {
         '首页',
         '入库单',
         '出库单',
+        '结算单',
         '邀请码',
         '成员',
         '字典',
@@ -49,11 +51,12 @@ void main() {
       expect(_routesOf(profile), contains('/members'));
     });
 
-    test('普通成员只有 首页 / 入库单 / 出库单 / 字典', () {
+    test('普通成员只有 首页 / 入库单 / 出库单 / 结算单 / 字典', () {
       expect(_routesOf(memberProfile()), <String>[
         '/home',
         '/documents/inbound',
         '/documents/outbound',
+        '/settlements',
         '/dictionaries',
       ]);
     });
@@ -67,6 +70,7 @@ void main() {
         '/home',
         '/documents/inbound',
         '/documents/outbound',
+        '/settlements',
         '/members',
         '/dictionaries',
       ]);

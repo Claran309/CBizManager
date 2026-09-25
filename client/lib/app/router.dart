@@ -15,6 +15,8 @@ import 'package:c_biz_docs_manager/features/members/presentation/members_page.da
 import 'package:c_biz_docs_manager/features/platform/presentation/create_group_page.dart';
 import 'package:c_biz_docs_manager/features/platform/presentation/platform_group_detail_page.dart';
 import 'package:c_biz_docs_manager/features/platform/presentation/platform_groups_page.dart';
+import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_detail_page.dart';
+import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_list_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -181,6 +183,15 @@ String? documentRedirect(String? rawDocumentId) =>
     ? '/documents/inbound?notice=invalid_document_id'
     : null;
 
+/// 解析 `/settlements/:settlementId` 里的结算单编号。
+int? parseSettlementId(String? raw) => _parsePositiveId(raw);
+
+/// 结算单详情地址的跳转决策：编号非法就回结算列表。
+String? settlementRedirect(String? rawSettlementId) =>
+    parseSettlementId(rawSettlementId) == null
+    ? '/settlements?notice=invalid_settlement_id'
+    : null;
+
 final routerProvider = Provider<GoRouter>((Ref ref) {
   final refresh = _AuthRouterRefresh(ref);
   ref.onDispose(refresh.dispose);
@@ -337,6 +348,25 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
                   parseDocumentId(state.pathParameters['documentId']) ?? 0,
               key: ValueKey<String>(
                 'document-outbound-${state.pathParameters['documentId']}',
+              ),
+            ),
+      ),
+      // 结算单：列表 + 详情审批。
+      GoRoute(
+        path: '/settlements',
+        builder: (BuildContext context, GoRouterState state) =>
+            const SettlementListPage(),
+      ),
+      GoRoute(
+        path: '/settlements/:settlementId',
+        redirect: (BuildContext context, GoRouterState state) =>
+            settlementRedirect(state.pathParameters['settlementId']),
+        builder: (BuildContext context, GoRouterState state) =>
+            SettlementDetailPage(
+              settlementId:
+                  parseSettlementId(state.pathParameters['settlementId']) ?? 0,
+              key: ValueKey<String>(
+                'settlement-${state.pathParameters['settlementId']}',
               ),
             ),
       ),
