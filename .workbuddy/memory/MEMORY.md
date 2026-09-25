@@ -236,9 +236,13 @@
      人民币大写信任服务端 `*_upper`，不自实现 rmb。
   2. **单据列表行的 `business_user` 只回填 `id`+`display_name`**，`username`/`account_type`
      是零值空串 ⇒ 单据列表行用 `DocumentBusinessUser`（宽松解析，只强校验 id+display_name）；
-     而**结算/财务/报表的 `requester`/`operator`/`decided_by`/`business_user` 是完整
-     UserSummary** ⇒ 用 `SettlementUser`（严格解析，account_type 走 AccountType.fromWireValue，
+     而**结算/财务/报表的 `requester`/`operator`/`decided_by`/`business_user`/`created_by`
+     是完整 UserSummary** ⇒ 一律用 core 的 `AuthUser`（`aeb6b72` 时曾叫 `SettlementUser`，
+     `9efa534` 已合并去重；严格解析，account_type 走 `AccountType.fromWireValue`，
      空串/未知抛错）。两者是**不同的类型**，别混用。
+     **唯一例外**：报表**公司维度快照**的 `business_user` 是全零值（id=0/username 空），
+     要按「id 是否为正整数」解析成 `null`（`report.dart` 的 `_readOptionalUser`），
+     不能 strict 解析（会抛）。
   3. 单据/结算/财务/报表的分页是**平铺** `items/page/page_size/total`，复用 `PageResult`
      （区别于成员/字典那种嵌套 `pagination`）。
 - **客户端定点金额/日期工具已就绪（Task 1 交付，`aeb6b72`）**：
