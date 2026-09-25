@@ -169,7 +169,7 @@ SettlementSummary _summary(int id) => SettlementSummary(
   settlementId: id,
   settlementNo: 'JS202609-000$id',
   status: SettlementStatus.pending,
-  requester: const SettlementUser(
+  requester: const AuthUser(
     id: 7,
     username: 'zhangsan',
     displayName: '张三',
@@ -191,7 +191,7 @@ SettlementDetail _detail(
   settlementId: id,
   settlementNo: 'JS202609-000$id',
   status: status,
-  requester: const SettlementUser(
+  requester: const AuthUser(
     id: 7,
     username: 'zhangsan',
     displayName: '张三',

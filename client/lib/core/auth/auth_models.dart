@@ -35,7 +35,16 @@ enum MemberType {
   );
 }
 
-/// `/auth/me` 返回的用户摘要（对应契约 `UserSummary`）。
+/// 用户摘要（对应契约 `UserSummary`）。
+///
+/// 既是 `/auth/me` 返回的当前用户，也是结算 / 财务 / 报表里 `requester` /
+/// `business_user` / `operator` / `created_by` 等**被引用的其他用户**的类型 ——
+/// 后端这几处用的是同一个 `identity.UserSummary`，客户端也复用同一个类型，
+/// 不再各建一套重复的解析。
+///
+/// 解析是**严格**的：`id` 必须是正整数、`username` / `display_name` 非空、
+/// `account_type` 必须是合法枚举值。这与单据列表行的 `DocumentBusinessUser`
+/// （只回填 id + display_name 的宽松解析）有意不同。
 final class AuthUser {
   const AuthUser({
     required this.id,

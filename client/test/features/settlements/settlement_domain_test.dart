@@ -1,3 +1,4 @@
+import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/features/settlements/domain/settlement.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -25,9 +26,9 @@ void main() {
     });
   });
 
-  group('SettlementUser（严格解析）', () {
+  group('AuthUser（严格解析）', () {
     test('完整 UserSummary 严格解析', () {
-      final user = SettlementUser.fromJson(<String, Object?>{
+      final user = AuthUser.fromJson(<String, Object?>{
         'id': 7,
         'username': 'zhangsan',
         'display_name': '张三',
@@ -41,7 +42,7 @@ void main() {
 
     test('account_type 空串或非法抛错', () {
       expect(
-        () => SettlementUser.fromJson(<String, Object?>{
+        () => AuthUser.fromJson(<String, Object?>{
           'id': 7,
           'username': 'zhangsan',
           'display_name': '张三',
@@ -50,7 +51,7 @@ void main() {
         throwsFormatException,
       );
       expect(
-        () => SettlementUser.fromJson(<String, Object?>{
+        () => AuthUser.fromJson(<String, Object?>{
           'id': 7,
           'username': 'zhangsan',
           'display_name': '张三',

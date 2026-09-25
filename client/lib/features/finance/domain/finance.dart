@@ -1,7 +1,7 @@
+import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/bizdate/bizdate.dart';
 import 'package:c_biz_docs_manager/core/money/money.dart';
 import 'package:c_biz_docs_manager/features/documents/domain/document.dart';
-import 'package:c_biz_docs_manager/features/settlements/domain/settlement.dart';
 
 /// 财务记录类型。
 ///
@@ -131,7 +131,7 @@ final class FinanceRecord {
   final DocumentKind documentKind;
   final String documentNo;
   final String partyName;
-  final SettlementUser businessUser;
+  final AuthUser businessUser;
   final DateTime businessDate;
   final Amount amount;
   final String amountUpper;
@@ -143,7 +143,7 @@ final class FinanceRecord {
   final String? cardTail;
   final String? invoiceNo;
   final String? remark;
-  final SettlementUser createdBy;
+  final AuthUser createdBy;
   final DateTime createdAt;
 
   factory FinanceRecord.fromJson(Map<String, Object?> json) => FinanceRecord(
@@ -155,7 +155,7 @@ final class FinanceRecord {
     ),
     documentNo: _readString(json, 'document_no'),
     partyName: _readString(json, 'party_name'),
-    businessUser: SettlementUser.fromJson(_readObject(json, 'business_user')),
+    businessUser: AuthUser.fromJson(_readObject(json, 'business_user')),
     businessDate: parseDate(_readString(json, 'business_date')),
     amount: _readAmount(json, 'amount'),
     amountUpper: _readString(json, 'amount_upper'),
@@ -167,7 +167,7 @@ final class FinanceRecord {
     cardTail: json['card_tail'] as String?,
     invoiceNo: json['invoice_no'] as String?,
     remark: json['remark'] as String?,
-    createdBy: SettlementUser.fromJson(_readObject(json, 'created_by')),
+    createdBy: AuthUser.fromJson(_readObject(json, 'created_by')),
     createdAt: _readDateTime(json, 'created_at'),
   );
 }
@@ -204,7 +204,7 @@ final class FinanceStatement {
   final DocumentKind documentKind;
   final String documentNo;
   final String partyName;
-  final SettlementUser businessUser;
+  final AuthUser businessUser;
   final DateTime businessDate;
   final Amount totalAmount;
   final String totalUpper;
@@ -232,9 +232,7 @@ final class FinanceStatement {
         ),
         documentNo: _readString(json, 'document_no'),
         partyName: _readString(json, 'party_name'),
-        businessUser: SettlementUser.fromJson(
-          _readObject(json, 'business_user'),
-        ),
+        businessUser: AuthUser.fromJson(_readObject(json, 'business_user')),
         businessDate: parseDate(_readString(json, 'business_date')),
         totalAmount: _readAmount(json, 'total_amount'),
         totalUpper: _readString(json, 'total_amount_upper'),

@@ -41,51 +41,6 @@ enum SettlementAction {
   );
 }
 
-/// 结算单里出现的用户摘要（申请人 / 审批人 / 源单据业务员）。
-///
-/// 与单据列表行的 [DocumentBusinessUser]（宽松解析）不同，结算里的 UserSummary
-/// 是**完整**的：后端 `Summary` 明确注释「列表行带完整字段（用户名/账号类型），
-/// 否则客户端按契约校验账号类型枚举时会被空串卡住」。所以这里对四个字段都做
-/// 强校验，`account_type` 走 [AccountType.fromWireValue]（空串/未知值抛错）。
-final class SettlementUser {
-  const SettlementUser({
-    required this.id,
-    required this.username,
-    required this.displayName,
-    required this.accountType,
-  });
-
-  final int id;
-  final String username;
-  final String displayName;
-  final AccountType accountType;
-
-  factory SettlementUser.fromJson(Map<String, Object?> json) {
-    final id = json['id'];
-    if (id is! int || id < 1) {
-      throw const FormatException('用户 id 无效');
-    }
-    final username = json['username'];
-    if (username is! String || username.isEmpty) {
-      throw const FormatException('用户 username 无效');
-    }
-    final displayName = json['display_name'];
-    if (displayName is! String || displayName.isEmpty) {
-      throw const FormatException('用户 display_name 无效');
-    }
-    final accountType = json['account_type'];
-    if (accountType is! String) {
-      throw const FormatException('用户 account_type 无效');
-    }
-    return SettlementUser(
-      id: id,
-      username: username,
-      displayName: displayName,
-      accountType: AccountType.fromWireValue(accountType),
-    );
-  }
-}
-
 /// 结算单列表行（对应契约 `SettlementSummaryData`）。
 final class SettlementSummary {
   const SettlementSummary({
@@ -107,7 +62,7 @@ final class SettlementSummary {
   final int settlementId;
   final String settlementNo;
   final SettlementStatus status;
-  final SettlementUser requester;
+  final AuthUser requester;
   final Amount inboundTotal;
   final Amount outboundTotal;
 
@@ -125,7 +80,7 @@ final class SettlementSummary {
         settlementId: _readPositiveInt(json, 'settlement_id'),
         settlementNo: _readString(json, 'settlement_no'),
         status: SettlementStatus.fromWireValue(_readString(json, 'status')),
-        requester: SettlementUser.fromJson(_readObject(json, 'requester')),
+        requester: AuthUser.fromJson(_readObject(json, 'requester')),
         inboundTotal: _readAmount(json, 'inbound_total'),
         outboundTotal: _readAmount(json, 'outbound_total'),
         grossProfit: _readAmount(json, 'gross_profit'),
@@ -155,7 +110,7 @@ final class SettlementSource {
   final int documentId;
   final DocumentKind kind;
   final String documentNo;
-  final SettlementUser businessUser;
+  final AuthUser businessUser;
   final DateTime businessDate;
   final Amount amount;
 
@@ -167,9 +122,7 @@ final class SettlementSource {
         documentId: _readPositiveInt(json, 'document_id'),
         kind: DocumentKind.fromWireValue(_readString(json, 'kind')),
         documentNo: _readString(json, 'document_no'),
-        businessUser: SettlementUser.fromJson(
-          _readObject(json, 'business_user'),
-        ),
+        businessUser: AuthUser.fromJson(_readObject(json, 'business_user')),
         businessDate: parseDate(_readString(json, 'business_date')),
         amount: _readAmount(json, 'amount'),
         released: json['released'] as bool,
@@ -186,14 +139,14 @@ final class SettlementApprovalRecord {
   });
 
   final SettlementAction action;
-  final SettlementUser operator;
+  final AuthUser operator;
   final String? remark;
   final DateTime createdAt;
 
   factory SettlementApprovalRecord.fromJson(Map<String, Object?> json) =>
       SettlementApprovalRecord(
         action: SettlementAction.fromWireValue(_readString(json, 'action')),
-        operator: SettlementUser.fromJson(_readObject(json, 'operator')),
+        operator: AuthUser.fromJson(_readObject(json, 'operator')),
         remark: json['remark'] as String?,
         createdAt: _readDateTime(json, 'created_at'),
       );
@@ -227,7 +180,7 @@ final class SettlementDetail {
   final int settlementId;
   final String settlementNo;
   final SettlementStatus status;
-  final SettlementUser requester;
+  final AuthUser requester;
   final String? remark;
   final Amount inboundTotal;
   final Amount outboundTotal;
@@ -240,7 +193,7 @@ final class SettlementDetail {
   final String grossProfitUpper;
   final int version;
   final DateTime? decidedAt;
-  final SettlementUser? decidedBy;
+  final AuthUser? decidedBy;
   final String? decisionRemark;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -252,7 +205,7 @@ final class SettlementDetail {
         settlementId: _readPositiveInt(json, 'settlement_id'),
         settlementNo: _readString(json, 'settlement_no'),
         status: SettlementStatus.fromWireValue(_readString(json, 'status')),
-        requester: SettlementUser.fromJson(_readObject(json, 'requester')),
+        requester: AuthUser.fromJson(_readObject(json, 'requester')),
         remark: json['remark'] as String?,
         inboundTotal: _readAmount(json, 'inbound_total'),
         outboundTotal: _readAmount(json, 'outbound_total'),
@@ -267,7 +220,7 @@ final class SettlementDetail {
             : DateTime.parse(json['decided_at'] as String).toUtc(),
         decidedBy: json['decided_by'] == null
             ? null
-            : SettlementUser.fromJson(_readObject(json, 'decided_by')),
+            : AuthUser.fromJson(_readObject(json, 'decided_by')),
         decisionRemark: json['decision_remark'] as String?,
         createdAt: _readDateTime(json, 'created_at'),
         updatedAt: _readDateTime(json, 'updated_at'),
