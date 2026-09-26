@@ -422,6 +422,42 @@ void main() {
     );
   });
 
+  testWidgets('业务模块在真实壳里可达：单据 / 结算 / 报表页面都能打开', (WidgetTester tester) async {
+    _setScreenSize(tester, const Size(1280, 800));
+    final backend = FakeBackend()
+      ..seedGroupWithOwner(groupName: 'Finance', ownerUsername: 'owner');
+    await _pumpApp(tester, backend);
+    await tester.pumpAndSettle();
+    await _login(tester, 'owner', 'owner-pass');
+    _expectAppBarTitle('首页');
+
+    Future<void> goTo(String label, String title) async {
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text(label),
+        ),
+      );
+      await tester.pumpAndSettle();
+      _expectAppBarTitle(title);
+    }
+
+    // 关键：这些页面的 Repository 由会话作用域装配。若 session_scope 漏装配，
+    // 页面一打开就抛 StateError —— 这条用例正是上一轮那个「测试全绿但线上不可用」
+    // 装配缺口的回归护栏。
+    await goTo('入库单', '入库单');
+    await goTo('出库单', '出库单');
+    await goTo('结算单', '结算单');
+    await goTo('报表', '报表');
+
+    // 新建单据表单也能在真实壳里打开（kind 由路由决定）。
+    await goTo('入库单', '入库单');
+    await tester.tap(find.byTooltip('新建入库单'));
+    await tester.pumpAndSettle();
+    _expectAppBarTitle('入库单');
+    expect(find.widgetWithText(FilledButton, '保存草稿'), findsOneWidget);
+  });
+
   testWidgets('会话切换与旧 owner 失效：交接后旧 owner 回登录页、状态不可见', (
     WidgetTester tester,
   ) async {
