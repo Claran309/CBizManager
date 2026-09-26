@@ -38,6 +38,10 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      // 进页面先清掉上一次遗留的详情：它只用于「创建成功后跳详情」这一件事，
+      // 留着会让本页被立刻弹走。**在这一步清、不在跳转时清** —— 跳转时清会与
+      // 详情页的 loadDetail 抢时序（清掉对方刚加载好的数据，页面就显示成「不存在」）。
+      ref.read(settlementControllerProvider.notifier).clearDetail();
       _loadCandidates();
     });
   }
@@ -92,8 +96,6 @@ class _SettlementCreatePageState extends ConsumerState<SettlementCreatePage> {
       final created = settlement.detail!;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        // 先复位再跳：否则下次再进申请页会被立刻弹走。
-        ref.read(settlementControllerProvider.notifier).clearDetail();
         context.go('/settlements/${created.settlementId}');
       });
     }
