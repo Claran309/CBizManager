@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:c_biz_docs_manager/core/money/money.dart';
 import 'package:dio/dio.dart';
 
 /// 模拟服务端的**确定性状态机**，供纵向 Widget 闭环测试使用。
@@ -75,6 +76,32 @@ final class FakeBackend implements HttpClientAdapter {
   int _nextMembershipId = 1;
   int _nextDictionaryId = 1;
   int _nextUserId = 100;
+
+  /* -------------------------------------------------- 业务单据 / 结算 / 财务 */
+
+  /// 单据：id -> 单据（入库与出库共用一张表，由 kind 判别）。
+  final Map<int, _FakeDocument> _documents = <int, _FakeDocument>{};
+
+  /// 结算单：id -> 结算单。
+  final Map<int, _FakeSettlement> _settlements = <int, _FakeSettlement>{};
+
+  /// 财务记录：id -> 记录。
+  final Map<int, _FakeFinanceRecord> _financeRecords =
+      <int, _FakeFinanceRecord>{};
+
+  /// 总结算快照：id -> 快照。
+  final Map<int, _FakeSnapshot> _snapshots = <int, _FakeSnapshot>{};
+
+  int _nextDocumentId = 1;
+  int _nextSettlementId = 1;
+  int _nextFinanceId = 1;
+  int _nextSnapshotId = 1;
+
+  /// 单号当日序号：`"groupId:前缀:YYYYMMDD" -> 已用序号`。
+  final Map<String, int> _docSequences = <String, int>{};
+
+  /// 结算单当月序号：`"groupId:YYYYMM" -> 已用序号`。
+  final Map<String, int> _settlementSequences = <String, int>{};
 
   /// 每次 `fetch` 递增的请求序号，用来生成确定性的 request_id。
   int _requestCounter = 0;
@@ -316,6 +343,80 @@ final class FakeBackend implements HttpClientAdapter {
     // 字典。
     if (path == '/api/v1/dictionaries' && method == 'GET') {
       return _dictionaryList(query);
+    }
+
+    // 单据：入库 / 出库共用一套结构，由路径前缀决定 kind。
+    if (path == '/api/v1/inbound-documents' && method == 'GET') {
+      return _documentsList(auth, 'inbound', query);
+    }
+    if (path == '/api/v1/inbound-documents' && method == 'POST') {
+      return _documentCreate(auth, 'inbound', body);
+    }
+    if (path.startsWith('/api/v1/inbound-documents/')) {
+      return _documentSubpath(auth, method, path, 'inbound', body);
+    }
+    if (path == '/api/v1/outbound-documents' && method == 'GET') {
+      return _documentsList(auth, 'outbound', query);
+    }
+    if (path == '/api/v1/outbound-documents' && method == 'POST') {
+      return _documentCreate(auth, 'outbound', body);
+    }
+    if (path.startsWith('/api/v1/outbound-documents/')) {
+      return _documentSubpath(auth, method, path, 'outbound', body);
+    }
+
+    // 结算单。
+    if (path == '/api/v1/settlements' && method == 'GET') {
+      return _settlementsList(auth, query);
+    }
+    if (path == '/api/v1/settlements' && method == 'POST') {
+      return _settlementCreate(auth, body);
+    }
+    if (path.startsWith('/api/v1/settlements/')) {
+      return _settlementSubpath(auth, path, body);
+    }
+
+    // 财务：付款 / 收款 / 开票共用一套结构；结清视图独立。
+    if (path.startsWith('/api/v1/finance/statements/')) {
+      return _statementHandler(auth, path);
+    }
+    for (final entry in const <String, String>{
+      '/api/v1/finance/payments': 'payment',
+      '/api/v1/finance/receipts': 'receipt',
+      '/api/v1/finance/invoices': 'invoice',
+    }.entries) {
+      if (path == entry.key && method == 'GET') {
+        return _financeList(auth, entry.value, query);
+      }
+      if (path == entry.key && method == 'POST') {
+        return _financeCreate(auth, entry.value, body);
+      }
+      if (path.startsWith('${entry.key}/')) {
+        return _financeRevoke(auth, path);
+      }
+    }
+
+    // 报表。
+    if (path == '/api/v1/reports/overview' && method == 'GET') {
+      return _reportOverview(auth, query);
+    }
+    if (path == '/api/v1/reports/inbound-stats' && method == 'GET') {
+      return _reportStats(auth, 'inbound', query);
+    }
+    if (path == '/api/v1/reports/outbound-stats' && method == 'GET') {
+      return _reportStats(auth, 'outbound', query);
+    }
+    if (path == '/api/v1/reports/business-users' && method == 'GET') {
+      return _reportBusinessUsers(auth, query);
+    }
+    if (path == '/api/v1/reports/summary-settlements' && method == 'GET') {
+      return _snapshotsList(auth, query);
+    }
+    if (path == '/api/v1/reports/summary-settlements' && method == 'POST') {
+      return _snapshotCreate(auth, body);
+    }
+    if (path.startsWith('/api/v1/reports/summary-settlements/')) {
+      return _snapshotDetail(auth, path);
     }
 
     return _FakeResponse(
@@ -1275,6 +1376,1320 @@ final class FakeBackend implements HttpClientAdapter {
     return id;
   }
 
+  /* ------------------------------------------------- 调用者与用户摘要 */
+
+  /// 解析租户调用者身份；未登录 / 平台管理员（不属于租户）返回 null。
+  _Caller? _caller(String? auth) {
+    final username = _usernameOfToken(auth);
+    if (username == null || _platformAdmins.containsKey(username)) return null;
+    final owner = _owners[username];
+    if (owner != null) {
+      final group = _groups[owner.groupId]!;
+      return (
+        username: username,
+        accountType: 'group_owner',
+        userId: _ownerUserId(username),
+        displayName: group.ownerDisplayName,
+        groupId: owner.groupId,
+      );
+    }
+    final member = _members[username];
+    if (member == null) return null;
+    final row = _memberRowOf(member.groupId, username);
+    return (
+      username: username,
+      accountType: 'member',
+      userId: member.userId,
+      displayName: row?.displayName ?? username,
+      groupId: member.groupId,
+    );
+  }
+
+  Map<String, Object?> _userSummaryJson(
+    int id,
+    String username,
+    String displayName,
+    String accountType,
+  ) => <String, Object?>{
+    'id': id,
+    'username': username,
+    'display_name': displayName,
+    'account_type': accountType,
+  };
+
+  /// 按 userId 在组内找成员摘要；找不到就退回「未知用户」。
+  Map<String, Object?> _userSummaryById(int groupId, int userId) {
+    final rows = _membersByGroup[groupId] ?? <int, _FakeMember>{};
+    for (final row in rows.values) {
+      if (row.userId == userId) {
+        return _userSummaryJson(
+          row.userId,
+          row.username,
+          row.displayName,
+          row.memberType == 'owner' ? 'group_owner' : 'member',
+        );
+      }
+    }
+    return _userSummaryJson(userId, 'user$userId', '用户$userId', 'member');
+  }
+
+  bool _canViewOthers(_Caller caller) {
+    if (caller.accountType == 'group_owner') return true;
+    // 主账号隐式全权限；业务员看是否被授予 document.view_others。
+    for (final member
+        in (_membersByGroup[caller.groupId] ?? <int, _FakeMember>{}).values) {
+      if (member.userId == caller.userId) {
+        return member.permissionCodes.contains('document.view_others');
+      }
+    }
+    return false;
+  }
+
+  /* ------------------------------------------------------------ 单据 */
+
+  String _pad(int value, int width) => value.toString().padLeft(width, '0');
+
+  String _documentNo(int groupId, String kind, String businessDate) {
+    final prefix = kind == 'outbound' ? 'CK' : 'RK';
+    final compact = businessDate.replaceAll('-', '');
+    final key = '$groupId:$prefix:$compact';
+    final seq = (_docSequences[key] ?? 0) + 1;
+    _docSequences[key] = seq;
+    return '$prefix$compact-${_pad(seq, 4)}';
+  }
+
+  /// 单据总额 = Σ 单价 × 数量（服务端算，四舍五入到分）。
+  Amount _draftTotal(List<_FakeParty> parties) {
+    var total = Amount.parse('0');
+    for (final party in parties) {
+      for (final item in party.items) {
+        total = total.add(
+          Amount.mul(
+            UnitPrice.parse(item.unitPrice),
+            Quantity.parse(item.quantity),
+          ),
+        );
+      }
+    }
+    return total;
+  }
+
+  Map<String, Object?> _documentJson(_FakeDocument doc) => <String, Object?>{
+    'document_id': doc.id,
+    'kind': doc.kind,
+    'document_no': doc.documentNo,
+    'status': doc.status,
+    'business_user': _userSummaryById(doc.groupId, doc.businessUserId),
+    'business_date': doc.businessDate,
+    'shipping_unit': doc.shippingUnit,
+    'sale_amount_type': doc.saleAmountType,
+    'total_amount': doc.totalAmount.format(),
+    'total_amount_upper': _upper(doc.totalAmount),
+    'remark': doc.remark,
+    'version': doc.version,
+    'submitted_at': doc.submittedAt,
+    'created_at': doc.createdAt.toIso8601String(),
+    'updated_at': doc.updatedAt.toIso8601String(),
+    'parties': <Object?>[
+      for (final party in doc.parties)
+        <String, Object?>{
+          'party_id': party.id,
+          'position': party.position,
+          'party_name': party.name,
+          'contact_phone': party.contactPhone,
+          'subtotal': party.subtotal.format(),
+          'items': <Object?>[
+            for (final item in party.items)
+              <String, Object?>{
+                'item_id': item.id,
+                'position': item.position,
+                'product_name': item.productName,
+                'product_model': item.productModel,
+                'unit': item.unit,
+                'quantity': item.quantity,
+                'weight': item.weight,
+                'unit_price': item.unitPrice,
+                'price_tax_mode': item.priceTaxMode,
+                'amount': item.amount.format(),
+                'remark': item.remark,
+              },
+          ],
+        },
+    ],
+  };
+
+  Map<String, Object?> _documentSummaryJson(_FakeDocument doc) =>
+      <String, Object?>{
+        'document_id': doc.id,
+        'kind': doc.kind,
+        'document_no': doc.documentNo,
+        'status': doc.status,
+        'business_date': doc.businessDate,
+        'business_user': _userSummaryById(doc.groupId, doc.businessUserId),
+        'shipping_unit': doc.shippingUnit,
+        'sale_amount_type': doc.saleAmountType,
+        'party_names': <String>[for (final party in doc.parties) party.name],
+        'item_count': doc.parties.fold<int>(
+          0,
+          (sum, party) => sum + party.items.length,
+        ),
+        'total_amount': doc.totalAmount.format(),
+        'version': doc.version,
+        'submitted_at': doc.submittedAt,
+        'created_at': doc.createdAt.toIso8601String(),
+        'updated_at': doc.updatedAt.toIso8601String(),
+      };
+
+  _FakeResponse _documentsList(
+    String? auth,
+    String kind,
+    Map<String, String> query,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final status = query['status'];
+    final month = query['month'];
+    final keyword = query['keyword'];
+    final businessUserId = int.tryParse(query['business_user_id'] ?? '');
+    final seeAll = _canViewOthers(caller);
+
+    final matched = <_FakeDocument>[];
+    for (final doc in _documents.values) {
+      if (doc.groupId != caller.groupId || doc.kind != kind) continue;
+      if (!seeAll && doc.businessUserId != caller.userId) continue;
+      if (status != null && status.isNotEmpty && doc.status != status) continue;
+      if (month != null &&
+          month.isNotEmpty &&
+          !doc.businessDate.startsWith(month)) {
+        continue;
+      }
+      if (businessUserId != null && doc.businessUserId != businessUserId) {
+        continue;
+      }
+      if (keyword != null &&
+          keyword.isNotEmpty &&
+          !doc.documentNo.contains(keyword) &&
+          !doc.parties.any((party) => party.name.contains(keyword))) {
+        continue;
+      }
+      matched.add(doc);
+    }
+    matched.sort((a, b) => b.id.compareTo(a.id));
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'items': <Object?>[
+          for (final doc in matched) _documentSummaryJson(doc),
+        ],
+        'page': 1,
+        'page_size': 20,
+        'total': matched.length,
+      }),
+    );
+  }
+
+  _FakeResponse _documentCreate(
+    String? auth,
+    String kind,
+    Map<String, Object?> body,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final status = (body['status'] as String?) ?? 'draft';
+    if (status != 'draft' && status != 'submitted') {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '状态不合法'));
+    }
+    final businessDate = body['business_date'];
+    if (businessDate is! String || businessDate.length < 10) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '业务日期不合法'));
+    }
+    final parties = _readParties(body);
+    if (parties == null) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '往来单位不合法'));
+    }
+    final total = _draftTotal(parties);
+    final id = _nextDocumentId++;
+    final now = DateTime.utc(2026, 9, 22, 10);
+    final doc = _FakeDocument(
+      id: id,
+      groupId: caller.groupId,
+      kind: kind,
+      documentNo: _documentNo(caller.groupId, kind, businessDate),
+      status: status,
+      businessUserId: (body['business_user_id'] as int?) ?? caller.userId,
+      businessDate: businessDate,
+      shippingUnit: body['shipping_unit'] as String?,
+      saleAmountType: body['sale_amount_type'] as String?,
+      totalAmount: total,
+      remark: body['remark'] as String?,
+      version: 1,
+      submittedAt: status == 'submitted' ? now.toIso8601String() : null,
+      createdAt: now,
+      updatedAt: now,
+      parties: parties,
+    );
+    _documents[id] = doc;
+    return _FakeResponse(201, _ok(_documentJson(doc)));
+  }
+
+  List<_FakeParty>? _readParties(Map<String, Object?> body) {
+    final raw = body['parties'];
+    if (raw is! List || raw.isEmpty) return null;
+    final parties = <_FakeParty>[];
+    var partyPosition = 1;
+    for (final entry in raw) {
+      if (entry is! Map) return null;
+      final party = Map<String, Object?>.from(entry);
+      final name = party['party_name'];
+      final items = party['items'];
+      if (name is! String || items is! List || items.isEmpty) return null;
+      final parsedItems = <_FakeItem>[];
+      var itemPosition = 1;
+      for (final rawItem in items) {
+        if (rawItem is! Map) return null;
+        final item = Map<String, Object?>.from(rawItem);
+        final productName = item['product_name'];
+        final quantity = item['quantity'];
+        final unitPrice = item['unit_price'];
+        if (productName is! String ||
+            quantity is! String ||
+            unitPrice is! String) {
+          return null;
+        }
+        final amount = Amount.mul(
+          UnitPrice.parse(unitPrice),
+          Quantity.parse(quantity),
+        );
+        parsedItems.add(
+          _FakeItem(
+            id: _nextDocumentId * 100 + itemPosition,
+            position: itemPosition,
+            productName: productName,
+            productModel: item['product_model'] as String?,
+            unit: item['unit'] as String?,
+            quantity: quantity,
+            weight: item['weight'] as String?,
+            unitPrice: unitPrice,
+            priceTaxMode: (item['price_tax_mode'] as String?) ?? 'tax_included',
+            amount: amount,
+            remark: item['remark'] as String?,
+          ),
+        );
+        itemPosition++;
+      }
+      parties.add(
+        _FakeParty(
+          id: partyPosition,
+          position: partyPosition,
+          name: name,
+          contactPhone: party['contact_phone'] as String?,
+          subtotal: Amount.sum(parsedItems.map((item) => item.amount)),
+          items: parsedItems,
+        ),
+      );
+      partyPosition++;
+    }
+    return parties;
+  }
+
+  _FakeResponse _documentSubpath(
+    String? auth,
+    String method,
+    String path,
+    String kind,
+    Map<String, Object?> body,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final rest = path.split('/').where((part) => part.isNotEmpty).toList();
+    // /api/v1/inbound-documents/{id}[/submit|/void]
+    final id = int.tryParse(
+      rest[rest.length -
+          (rest.last == 'submit' || rest.last == 'void' ? 2 : 1)],
+    );
+    if (id == null) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '单据不存在'));
+    }
+    final doc = _documents[id];
+    if (doc == null || doc.groupId != caller.groupId || doc.kind != kind) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '单据不存在'));
+    }
+
+    if (rest.last == 'submit') {
+      return _documentTransition(doc, body, 'submitted');
+    }
+    if (rest.last == 'void') {
+      return _documentTransition(doc, body, 'voided');
+    }
+    if (method == 'GET') {
+      return _FakeResponse(200, _ok(_documentJson(doc)));
+    }
+    if (method == 'PUT') {
+      return _documentUpdate(caller.groupId, doc, body);
+    }
+    return _FakeResponse(
+      404,
+      _error('INTERNAL_ERROR', 'FakeBackend 未实现 $method $path'),
+    );
+  }
+
+  _FakeResponse _documentTransition(
+    _FakeDocument doc,
+    Map<String, Object?> body,
+    String next,
+  ) {
+    final version = body['version'];
+    if (version is! int || version != doc.version) {
+      return _FakeResponse(409, _error('RESOURCE_VERSION_CONFLICT', '版本冲突'));
+    }
+    if (next == 'submitted' && doc.status != 'draft') {
+      return _FakeResponse(409, _error('DOCUMENT_STATUS_INVALID', '状态不允许提交'));
+    }
+    if (next == 'voided' &&
+        doc.status != 'draft' &&
+        doc.status != 'submitted') {
+      return _FakeResponse(409, _error('DOCUMENT_STATUS_INVALID', '状态不允许作废'));
+    }
+    doc.status = next;
+    doc.version++;
+    doc.updatedAt = DateTime.utc(2026, 9, 22, 11);
+    if (next == 'submitted') {
+      doc.submittedAt = doc.updatedAt.toIso8601String();
+    }
+    return _FakeResponse(200, _ok(_documentJson(doc)));
+  }
+
+  _FakeResponse _documentUpdate(
+    int groupId,
+    _FakeDocument doc,
+    Map<String, Object?> body,
+  ) {
+    final version = body['version'];
+    if (version is! int || version != doc.version) {
+      return _FakeResponse(409, _error('RESOURCE_VERSION_CONFLICT', '版本冲突'));
+    }
+    if (doc.status != 'draft') {
+      return _FakeResponse(409, _error('DOCUMENT_STATUS_INVALID', '仅草稿可编辑'));
+    }
+    final parties = _readParties(body);
+    if (parties == null) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '往来单位不合法'));
+    }
+    doc.parties = parties;
+    // 总额按新的往来单位/明细重算。
+    doc.totalAmount = _draftTotal(parties);
+    doc.businessDate = (body['business_date'] as String?) ?? doc.businessDate;
+    doc.shippingUnit = body['shipping_unit'] as String?;
+    doc.saleAmountType = body['sale_amount_type'] as String?;
+    doc.remark = body['remark'] as String?;
+    doc.version++;
+    doc.updatedAt = DateTime.utc(2026, 9, 22, 12);
+    return _FakeResponse(200, _ok(_documentJson(doc)));
+  }
+
+  /* ------------------------------------------------------------ 结算 */
+
+  String _settlementNo(int groupId, String month) {
+    final compact = month.replaceAll('-', '');
+    final key = '$groupId:$compact';
+    final seq = (_settlementSequences[key] ?? 0) + 1;
+    _settlementSequences[key] = seq;
+    return 'JS$compact-${_pad(seq, 4)}';
+  }
+
+  Map<String, Object?> _settlementSummaryJson(_FakeSettlement s) =>
+      <String, Object?>{
+        'settlement_id': s.id,
+        'settlement_no': s.settlementNo,
+        'status': s.status,
+        'requester': _userSummaryById(s.groupId, s.requesterUserId),
+        'inbound_total': s.inboundTotal.format(),
+        'outbound_total': s.outboundTotal.format(),
+        'gross_profit': s.grossProfit.format(),
+        'source_count': s.sources.length,
+        'version': s.version,
+        'decided_at': s.decidedAt,
+        'decision_remark': s.decisionRemark,
+        'created_at': s.createdAt.toIso8601String(),
+        'updated_at': s.updatedAt.toIso8601String(),
+      };
+
+  Map<String, Object?> _settlementJson(_FakeSettlement s) => <String, Object?>{
+    ..._settlementSummaryJson(s),
+    'remark': s.remark,
+    'inbound_total_upper': _upper(s.inboundTotal),
+    'outbound_total_upper': _upper(s.outboundTotal),
+    'gross_profit_upper': _upper(s.grossProfit),
+    'decided_by': s.decidedByUserId == null
+        ? null
+        : _userSummaryById(s.groupId, s.decidedByUserId!),
+    'sources': <Object?>[
+      for (final source in s.sources)
+        <String, Object?>{
+          'document_id': source.documentId,
+          'kind': source.kind,
+          'document_no': source.documentNo,
+          'business_user': _userSummaryById(s.groupId, source.businessUserId),
+          'business_date': source.businessDate,
+          'amount': source.amount.format(),
+          'released': source.released,
+        },
+    ],
+    'approval_records': <Object?>[
+      for (final record in s.approvalRecords)
+        <String, Object?>{
+          'action': record['action'],
+          'operator': record['operator'],
+          'remark': record['remark'],
+          'created_at': record['created_at'],
+        },
+    ],
+  };
+
+  _FakeResponse _settlementsList(String? auth, Map<String, String> query) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final seeAll = _canViewOthers(caller);
+    final status = query['status'];
+    final matched = <_FakeSettlement>[];
+    for (final settlement in _settlements.values) {
+      if (settlement.groupId != caller.groupId) continue;
+      if (!seeAll && settlement.requesterUserId != caller.userId) continue;
+      if (status != null && status.isNotEmpty && settlement.status != status) {
+        continue;
+      }
+      matched.add(settlement);
+    }
+    matched.sort((a, b) => b.id.compareTo(a.id));
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'items': <Object?>[
+          for (final settlement in matched) _settlementSummaryJson(settlement),
+        ],
+        'page': 1,
+        'page_size': 20,
+        'total': matched.length,
+      }),
+    );
+  }
+
+  _FakeResponse _settlementCreate(String? auth, Map<String, Object?> body) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final rawSources = body['sources'];
+    if (rawSources is! List || rawSources.isEmpty) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '至少勾选一张源单据'));
+    }
+    final docs = <_FakeDocument>[];
+    for (final entry in rawSources) {
+      if (entry is! Map) {
+        return _FakeResponse(400, _error('VALIDATION_FAILED', '源单据不合法'));
+      }
+      final documentId = Map<String, Object?>.from(entry)['document_id'];
+      final doc = documentId is int ? _documents[documentId] : null;
+      if (doc == null || doc.groupId != caller.groupId) {
+        return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '源单据不存在'));
+      }
+      if (doc.status != 'submitted') {
+        return _FakeResponse(
+          409,
+          _error('SETTLEMENT_SOURCE_INVALID', '源单据未提交'),
+        );
+      }
+      if (_isDocumentActivelySettled(doc.id)) {
+        return _FakeResponse(
+          409,
+          _error('SETTLEMENT_SOURCE_IN_USE', '源单据已被有效结算单占用'),
+        );
+      }
+      docs.add(doc);
+    }
+
+    final month = _monthOf(docs.first.businessDate);
+    var inbound = Amount.parse('0');
+    var outbound = Amount.parse('0');
+    for (final doc in docs) {
+      if (doc.kind == 'inbound') {
+        inbound = inbound.add(doc.totalAmount);
+      } else {
+        outbound = outbound.add(doc.totalAmount);
+      }
+    }
+    final id = _nextSettlementId++;
+    final now = DateTime.utc(2026, 9, 22, 13);
+    final settlement = _FakeSettlement(
+      id: id,
+      groupId: caller.groupId,
+      settlementNo: _settlementNo(caller.groupId, month),
+      status: 'pending',
+      requesterUserId: caller.userId,
+      remark: body['remark'] as String?,
+      inboundTotal: inbound,
+      outboundTotal: outbound,
+      grossProfit: outbound.sub(inbound),
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      sources: <_FakeSettlementSource>[
+        for (final doc in docs)
+          _FakeSettlementSource(
+            documentId: doc.id,
+            kind: doc.kind,
+            documentNo: doc.documentNo,
+            businessUserId: doc.businessUserId,
+            businessDate: doc.businessDate,
+            amount: doc.totalAmount,
+            released: false,
+          ),
+      ],
+    );
+    settlement.approvalRecords.add(<String, Object?>{
+      'action': 'submitted',
+      'operator': _userSummaryById(caller.groupId, caller.userId),
+      'remark': null,
+      'created_at': now.toIso8601String(),
+    });
+    _settlements[id] = settlement;
+    return _FakeResponse(201, _ok(_settlementJson(settlement)));
+  }
+
+  bool _isDocumentActivelySettled(int documentId) {
+    for (final settlement in _settlements.values) {
+      for (final source in settlement.sources) {
+        if (source.documentId == documentId && !source.released) return true;
+      }
+    }
+    return false;
+  }
+
+  _FakeResponse _settlementSubpath(
+    String? auth,
+    String path,
+    Map<String, Object?> body,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final rest = path.split('/').where((part) => part.isNotEmpty).toList();
+    final isDecision = rest.last == 'approve' || rest.last == 'reject';
+    final id = int.tryParse(rest[rest.length - (isDecision ? 2 : 1)]);
+    final settlement = id == null ? null : _settlements[id];
+    if (settlement == null || settlement.groupId != caller.groupId) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '结算单不存在'));
+    }
+    if (!isDecision) {
+      return _FakeResponse(200, _ok(_settlementJson(settlement)));
+    }
+    return _settlementDecide(
+      caller,
+      settlement,
+      body,
+      approved: rest.last == 'approve',
+    );
+  }
+
+  _FakeResponse _settlementDecide(
+    _Caller caller,
+    _FakeSettlement settlement,
+    Map<String, Object?> body, {
+    required bool approved,
+  }) {
+    final version = body['version'];
+    if (version is! int || version != settlement.version) {
+      return _FakeResponse(409, _error('RESOURCE_VERSION_CONFLICT', '版本冲突'));
+    }
+    if (settlement.status != 'pending') {
+      return _FakeResponse(409, _error('SETTLEMENT_STATUS_INVALID', '已审批'));
+    }
+    final remark = body['remark'] as String?;
+    if (!approved && (remark == null || remark.trim().isEmpty)) {
+      return _FakeResponse(
+        400,
+        _error('SETTLEMENT_REMARK_REQUIRED', '驳回必须填写备注'),
+      );
+    }
+    final now = DateTime.utc(2026, 9, 22, 14);
+    settlement.status = approved ? 'approved' : 'rejected';
+    settlement.version++;
+    settlement.decidedAt = now.toIso8601String();
+    settlement.decidedByUserId = caller.userId;
+    settlement.decisionRemark = remark;
+    settlement.updatedAt = now;
+    if (!approved) {
+      // 驳回释放源单据的活跃引用，允许重新申请。
+      for (final source in settlement.sources) {
+        source.released = true;
+      }
+    }
+    settlement.approvalRecords.add(<String, Object?>{
+      'action': approved ? 'approved' : 'rejected',
+      'operator': _userSummaryById(caller.groupId, caller.userId),
+      'remark': remark,
+      'created_at': now.toIso8601String(),
+    });
+    return _FakeResponse(200, _ok(_settlementJson(settlement)));
+  }
+
+  /* ------------------------------------------------------------ 财务 */
+
+  Map<String, Object?> _financeJson(_FakeFinanceRecord r) => <String, Object?>{
+    'record_id': r.id,
+    'kind': r.kind,
+    'document_id': r.documentId,
+    'document_kind': r.documentKind,
+    'document_no': r.documentNo,
+    'party_name': r.partyName,
+    'business_user': _userSummaryById(r.groupId, r.businessUserId),
+    'business_date': r.businessDate,
+    'amount': r.amount.format(),
+    'amount_upper': _upper(r.amount),
+    'occurred_on': r.occurredOn,
+    'method': r.method,
+    'method_note': r.methodNote,
+    'card_tail': r.cardTail,
+    'invoice_no': r.invoiceNo,
+    'remark': r.remark,
+    'created_by': _userSummaryById(r.groupId, r.createdByUserId),
+    'created_at': r.createdAt.toIso8601String(),
+  };
+
+  _FakeResponse _financeList(
+    String? auth,
+    String kind,
+    Map<String, String> query,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final documentId = int.tryParse(query['document_id'] ?? '');
+    final matched = <_FakeFinanceRecord>[];
+    for (final record in _financeRecords.values) {
+      if (record.groupId != caller.groupId || record.kind != kind) continue;
+      if (documentId != null && record.documentId != documentId) continue;
+      matched.add(record);
+    }
+    matched.sort((a, b) => b.id.compareTo(a.id));
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'items': <Object?>[for (final r in matched) _financeJson(r)],
+        'page': 1,
+        'page_size': 20,
+        'total': matched.length,
+      }),
+    );
+  }
+
+  _FakeResponse _financeCreate(
+    String? auth,
+    String kind,
+    Map<String, Object?> body,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final documentId = body['document_id'];
+    final doc = documentId is int ? _documents[documentId] : null;
+    if (doc == null || doc.groupId != caller.groupId) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '单据不存在'));
+    }
+    final expectedKind = kind == 'receipt' ? 'outbound' : 'inbound';
+    if (doc.kind != expectedKind) {
+      return _FakeResponse(
+        400,
+        _error('FINANCE_DOCUMENT_KIND_MISMATCH', '单据类型不匹配'),
+      );
+    }
+    final amountRaw = body['amount'];
+    if (amountRaw is! String) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '金额不合法'));
+    }
+    final amount = Amount.parse(amountRaw);
+    // 累计不超过单据总额（对齐后端「锁单据行校验上限」的口径）。
+    final already = _sumByKind(doc.id, kind);
+    if (already.add(amount).inMinorUnits > doc.totalAmount.inMinorUnits) {
+      return _FakeResponse(400, _error('FINANCE_AMOUNT_EXCEEDS', '累计金额超过单据总额'));
+    }
+    final occurredOn = body['occurred_on'];
+    if (occurredOn is! String) {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '发生日期不合法'));
+    }
+    final id = _nextFinanceId++;
+    _financeRecords[id] = _FakeFinanceRecord(
+      id: id,
+      groupId: caller.groupId,
+      kind: kind,
+      documentId: doc.id,
+      documentKind: doc.kind,
+      documentNo: doc.documentNo,
+      partyName: doc.parties.isEmpty ? '' : doc.parties.first.name,
+      businessUserId: doc.businessUserId,
+      businessDate: doc.businessDate,
+      amount: amount,
+      occurredOn: occurredOn,
+      method: body['method'] as String?,
+      methodNote: body['method_note'] as String?,
+      cardTail: body['card_tail'] as String?,
+      invoiceNo: body['invoice_no'] as String?,
+      remark: body['remark'] as String?,
+      createdByUserId: caller.userId,
+      createdAt: DateTime.utc(2026, 9, 22, 15),
+    );
+    return _FakeResponse(201, _ok(_statementJson(doc)));
+  }
+
+  _FakeResponse _financeRevoke(String? auth, String path) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final rest = path.split('/').where((part) => part.isNotEmpty).toList();
+    final id = int.tryParse(rest[rest.length - 2]);
+    final record = id == null ? null : _financeRecords[id];
+    if (record == null || record.groupId != caller.groupId) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '财务记录不存在'));
+    }
+    _financeRecords.remove(record.id);
+    final doc = _documents[record.documentId]!;
+    return _FakeResponse(200, _ok(_statementJson(doc)));
+  }
+
+  Amount _sumByKind(int documentId, String kind) {
+    var total = Amount.parse('0');
+    for (final record in _financeRecords.values) {
+      if (record.documentId == documentId && record.kind == kind) {
+        total = total.add(record.amount);
+      }
+    }
+    return total;
+  }
+
+  int _countByKind(int documentId, String kind) {
+    var count = 0;
+    for (final record in _financeRecords.values) {
+      if (record.documentId == documentId && record.kind == kind) count++;
+    }
+    return count;
+  }
+
+  Map<String, Object?> _statementJson(_FakeDocument doc) {
+    final paid = _sumByKind(doc.id, 'payment');
+    final invoiced = _sumByKind(doc.id, 'invoice');
+    final received = _sumByKind(doc.id, 'receipt');
+    final isInbound = doc.kind == 'inbound';
+    final invoicedStatus = !isInbound
+        ? 'not_applicable'
+        : invoiced.isZero
+        ? 'none'
+        : invoiced.inMinorUnits < doc.totalAmount.inMinorUnits
+        ? 'partial'
+        : 'full';
+    return <String, Object?>{
+      'document_id': doc.id,
+      'document_kind': doc.kind,
+      'document_no': doc.documentNo,
+      'party_name': doc.parties.isEmpty ? '' : doc.parties.first.name,
+      'business_user': _userSummaryById(doc.groupId, doc.businessUserId),
+      'business_date': doc.businessDate,
+      'total_amount': doc.totalAmount.format(),
+      'total_amount_upper': _upper(doc.totalAmount),
+      'paid_amount': (isInbound ? paid : Amount.parse('0')).format(),
+      'unpaid_amount':
+          (isInbound ? _outstanding(doc.totalAmount, paid) : Amount.parse('0'))
+              .format(),
+      'paid_amount_upper': _upper(isInbound ? paid : Amount.parse('0')),
+      'unpaid_amount_upper': _upper(
+        isInbound ? _outstanding(doc.totalAmount, paid) : Amount.parse('0'),
+      ),
+      'invoiced_amount': (isInbound ? invoiced : Amount.parse('0')).format(),
+      'uninvoiced_amount':
+          (isInbound
+                  ? _outstanding(doc.totalAmount, invoiced)
+                  : Amount.parse('0'))
+              .format(),
+      'invoiced_amount_upper': _upper(isInbound ? invoiced : Amount.parse('0')),
+      'uninvoiced_amount_upper': _upper(
+        isInbound ? _outstanding(doc.totalAmount, invoiced) : Amount.parse('0'),
+      ),
+      'invoice_status': invoicedStatus,
+      'received_amount': (isInbound ? Amount.parse('0') : received).format(),
+      'unreceived_amount':
+          (isInbound
+                  ? Amount.parse('0')
+                  : _outstanding(doc.totalAmount, received))
+              .format(),
+      'received_amount_upper': _upper(isInbound ? Amount.parse('0') : received),
+      'unreceived_amount_upper': _upper(
+        isInbound ? Amount.parse('0') : _outstanding(doc.totalAmount, received),
+      ),
+      'payment_count': _countByKind(doc.id, 'payment'),
+      'receipt_count': _countByKind(doc.id, 'receipt'),
+      'invoice_count': _countByKind(doc.id, 'invoice'),
+      'records': <Object?>[
+        for (final record in _financeRecords.values)
+          if (record.documentId == doc.id) _financeJson(record),
+      ],
+    };
+  }
+
+  Amount _outstanding(Amount total, Amount recorded) {
+    final remaining = total.sub(recorded);
+    return remaining.isNegative ? Amount.parse('0') : remaining;
+  }
+
+  /* ------------------------------------------------------------ 报表 */
+
+  String _monthOf(String date) =>
+      date.length >= 7 ? date.substring(0, 7) : date;
+
+  _FakeResponse _reportOverview(String? auth, Map<String, String> query) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无查看报表权限'));
+    }
+    final period = query['period'] ?? '';
+    var inbound = Amount.parse('0');
+    var outbound = Amount.parse('0');
+    var inboundCount = 0;
+    var outboundCount = 0;
+    var paid = Amount.parse('0');
+    var unpaidCount = 0;
+    var invoiced = Amount.parse('0');
+    var received = Amount.parse('0');
+    final suppliers = <String>{};
+    final customers = <String>{};
+
+    for (final doc in _documents.values) {
+      if (doc.groupId != caller.groupId || doc.status != 'submitted') continue;
+      if (period.isNotEmpty && _monthOf(doc.businessDate) != period) continue;
+      if (doc.kind == 'inbound') {
+        inbound = inbound.add(doc.totalAmount);
+        inboundCount++;
+        if (doc.parties.isNotEmpty) suppliers.add(doc.parties.first.name);
+        final docPaid = _sumByKind(doc.id, 'payment');
+        paid = paid.add(docPaid);
+        invoiced = invoiced.add(_sumByKind(doc.id, 'invoice'));
+        if (_outstanding(doc.totalAmount, docPaid).inMinorUnits > BigInt.zero) {
+          unpaidCount++;
+        }
+      } else {
+        outbound = outbound.add(doc.totalAmount);
+        outboundCount++;
+        if (doc.parties.isNotEmpty) customers.add(doc.parties.first.name);
+        received = received.add(_sumByKind(doc.id, 'receipt'));
+      }
+    }
+    final grossProfit = outbound.sub(inbound);
+    final uninvoicedSum = _sumSubmittedOutstanding(
+      caller.groupId,
+      period,
+      'invoice',
+    );
+    final unreceivedSum = _sumSubmittedOutstanding(
+      caller.groupId,
+      period,
+      'receipt',
+    );
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'period': period,
+        'inbound_document_count': inboundCount,
+        'inbound_amount': inbound.format(),
+        'inbound_amount_upper': _upper(inbound),
+        'outbound_document_count': outboundCount,
+        'outbound_amount': outbound.format(),
+        'outbound_amount_upper': _upper(outbound),
+        'gross_profit': grossProfit.format(),
+        'gross_profit_upper': _upper(grossProfit),
+        'gross_margin_ppm': 0,
+        'gross_margin_percent': '0.00',
+        'paid_amount': paid.format(),
+        'unpaid_amount': _outstanding(inbound, paid).format(),
+        'unpaid_amount_upper': _upper(_outstanding(inbound, paid)),
+        'unpaid_document_count': unpaidCount,
+        'invoiced_amount': invoiced.format(),
+        'uninvoiced_amount': uninvoicedSum.format(),
+        'uninvoiced_amount_upper': _upper(uninvoicedSum),
+        'uninvoiced_document_count': 0,
+        'received_amount': received.format(),
+        'unreceived_amount': unreceivedSum.format(),
+        'unreceived_amount_upper': _upper(unreceivedSum),
+        'unreceived_document_count': 0,
+        'supplier_count': suppliers.length,
+        'customer_count': customers.length,
+        'sale_amount_types': <Object?>[
+          for (final type in <String>['Y-1', 'y-N', 'N'])
+            <String, Object?>{
+              'sale_amount_type': type,
+              'amount': '0.00',
+              'amount_upper': _upper(Amount.parse('0')),
+              'share_ppm': 0,
+              'share_percent': '0.00',
+            },
+        ],
+      }),
+    );
+  }
+
+  Amount _sumSubmittedOutstanding(int groupId, String period, String kind) {
+    var total = Amount.parse('0');
+    for (final doc in _documents.values) {
+      if (doc.groupId != groupId || doc.status != 'submitted') continue;
+      if (kind == 'invoice' && doc.kind != 'inbound') continue;
+      if (kind == 'receipt' && doc.kind != 'outbound') continue;
+      if (period.isNotEmpty && _monthOf(doc.businessDate) != period) continue;
+      total = total.add(
+        _outstanding(doc.totalAmount, _sumByKind(doc.id, kind)),
+      );
+    }
+    return total;
+  }
+
+  bool _hasReportPermission(_Caller caller) {
+    if (caller.accountType == 'group_owner') return true;
+    for (final member
+        in (_membersByGroup[caller.groupId] ?? <int, _FakeMember>{}).values) {
+      if (member.userId == caller.userId) {
+        return member.permissionCodes.contains('report.view');
+      }
+    }
+    return false;
+  }
+
+  _FakeResponse _reportStats(
+    String? auth,
+    String kind,
+    Map<String, String> query,
+  ) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无查看报表权限'));
+    }
+    final period = query['period'] ?? '';
+    var total = Amount.parse('0');
+    var count = 0;
+    final items = <Map<String, Object?>>[];
+    for (final doc in _documents.values) {
+      if (doc.groupId != caller.groupId || doc.kind != kind) continue;
+      if (doc.status != 'submitted') continue;
+      if (period.isNotEmpty && _monthOf(doc.businessDate) != period) continue;
+      count++;
+      total = total.add(doc.totalAmount);
+      for (final party in doc.parties) {
+        for (final item in party.items) {
+          items.add(<String, Object?>{
+            'party_name': party.name,
+            'product_name': item.productName,
+            'product_model': item.productModel,
+            'unit': item.unit,
+            'document_count': 1,
+            'quantity': item.quantity,
+            'amount': item.amount.format(),
+            'amount_upper': _upper(item.amount),
+          });
+        }
+      }
+    }
+    final isInbound = kind == 'inbound';
+    final recorded = isInbound
+        ? _sumGroupRecords(caller.groupId, 'payment')
+        : _sumGroupRecords(caller.groupId, 'receipt');
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'period': period,
+        'document_count': count,
+        'amount_total': total.format(),
+        'amount_total_upper': _upper(total),
+        if (isInbound) ...<String, Object?>{
+          'paid_amount': recorded.format(),
+          'unpaid_amount': _outstanding(total, recorded).format(),
+          'unpaid_amount_upper': _upper(_outstanding(total, recorded)),
+          'unpaid_document_count': 0,
+          'invoiced_amount': _sumGroupRecords(
+            caller.groupId,
+            'invoice',
+          ).format(),
+          'uninvoiced_amount': _outstanding(
+            total,
+            _sumGroupRecords(caller.groupId, 'invoice'),
+          ).format(),
+          'uninvoiced_amount_upper': _upper(
+            _outstanding(total, _sumGroupRecords(caller.groupId, 'invoice')),
+          ),
+          'uninvoiced_document_count': 0,
+          'supplier_count': 0,
+        } else ...<String, Object?>{
+          'received_amount': recorded.format(),
+          'unreceived_amount': _outstanding(total, recorded).format(),
+          'unreceived_amount_upper': _upper(_outstanding(total, recorded)),
+          'unreceived_document_count': 0,
+          'customer_count': 0,
+          'sale_amount_types': <Object?>[
+            for (final type in <String>['Y-1', 'y-N', 'N'])
+              <String, Object?>{
+                'sale_amount_type': type,
+                'amount': '0.00',
+                'amount_upper': _upper(Amount.parse('0')),
+                'share_ppm': 0,
+                'share_percent': '0.00',
+              },
+          ],
+        },
+        'items': <Object?>[for (final item in items) item],
+        'page': 1,
+        'page_size': 20,
+        'total': items.length,
+      }),
+    );
+  }
+
+  Amount _sumGroupRecords(int groupId, String kind) {
+    var total = Amount.parse('0');
+    for (final record in _financeRecords.values) {
+      if (record.groupId == groupId && record.kind == kind) {
+        total = total.add(record.amount);
+      }
+    }
+    return total;
+  }
+
+  _FakeResponse _reportBusinessUsers(String? auth, Map<String, String> query) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无查看报表权限'));
+    }
+    final period = query['period'] ?? '';
+    final byUser = <int, ({Amount inbound, Amount outbound, int count})>{};
+    for (final doc in _documents.values) {
+      if (doc.groupId != caller.groupId || doc.status != 'submitted') continue;
+      if (period.isNotEmpty && _monthOf(doc.businessDate) != period) continue;
+      final existing =
+          byUser[doc.businessUserId] ??
+          (inbound: Amount.parse('0'), outbound: Amount.parse('0'), count: 0);
+      byUser[doc.businessUserId] = (
+        inbound: doc.kind == 'inbound'
+            ? existing.inbound.add(doc.totalAmount)
+            : existing.inbound,
+        outbound: doc.kind == 'outbound'
+            ? existing.outbound.add(doc.totalAmount)
+            : existing.outbound,
+        count: existing.count + 1,
+      );
+    }
+    var totalIn = Amount.parse('0');
+    var totalOut = Amount.parse('0');
+    var totalCount = 0;
+    final items = <Map<String, Object?>>[];
+    for (final entry in byUser.entries) {
+      totalIn = totalIn.add(entry.value.inbound);
+      totalOut = totalOut.add(entry.value.outbound);
+      totalCount += entry.value.count;
+      items.add(<String, Object?>{
+        'business_user': _userSummaryById(caller.groupId, entry.key),
+        'inbound_amount': entry.value.inbound.format(),
+        'outbound_amount': entry.value.outbound.format(),
+        'gross_profit': entry.value.outbound.sub(entry.value.inbound).format(),
+        'gross_profit_upper': _upper(
+          entry.value.outbound.sub(entry.value.inbound),
+        ),
+        'document_count': entry.value.count,
+      });
+    }
+    final gross = totalOut.sub(totalIn);
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'period': period,
+        'items': <Object?>[for (final item in items) item],
+        'summary': <String, Object?>{
+          'inbound_amount': totalIn.format(),
+          'outbound_amount': totalOut.format(),
+          'gross_profit': gross.format(),
+          'gross_profit_upper': _upper(gross),
+          'document_count': totalCount,
+        },
+      }),
+    );
+  }
+
+  Map<String, Object?> _snapshotJson(
+    _FakeSnapshot snapshot,
+  ) => <String, Object?>{
+    'snapshot_id': snapshot.id,
+    'snapshot_no': snapshot.snapshotNo,
+    'batch_no': snapshot.batchNo,
+    'scope': snapshot.scope,
+    'period': snapshot.period,
+    // 公司维度回全零值（与后端一致）。
+    'business_user': snapshot.businessUserId == null
+        ? _userSummaryJson(0, '', '', '')
+        : _userSummaryById(snapshot.groupId, snapshot.businessUserId!),
+    'inbound_amount': snapshot.inbound.format(),
+    'inbound_amount_upper': _upper(snapshot.inbound),
+    'outbound_amount': snapshot.outbound.format(),
+    'outbound_amount_upper': _upper(snapshot.outbound),
+    'gross_profit': snapshot.grossProfit.format(),
+    'gross_profit_upper': _upper(snapshot.grossProfit),
+    'gross_margin_ppm': 0,
+    'gross_margin_percent': '0.00',
+    'sale_amount_types': <Object?>[
+      for (final type in <String>['Y-1', 'y-N', 'N'])
+        <String, Object?>{
+          'sale_amount_type': type,
+          'amount': '0.00',
+          'amount_upper': _upper(Amount.parse('0')),
+          'share_ppm': 0,
+          'share_percent': '0.00',
+        },
+    ],
+    'document_count': snapshot.documentCount,
+    'remark': snapshot.remark,
+    'created_by': _userSummaryById(snapshot.groupId, snapshot.createdByUserId),
+    'created_at': snapshot.createdAt.toIso8601String(),
+  };
+
+  _FakeResponse _snapshotsList(String? auth, Map<String, String> query) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无查看报表权限'));
+    }
+    final matched = <_FakeSnapshot>[];
+    for (final snapshot in _snapshots.values) {
+      if (snapshot.groupId != caller.groupId) continue;
+      matched.add(snapshot);
+    }
+    matched.sort((a, b) => b.id.compareTo(a.id));
+    return _FakeResponse(
+      200,
+      _ok(<String, Object?>{
+        'items': <Object?>[for (final s in matched) _snapshotJson(s)],
+        'page': 1,
+        'page_size': 20,
+        'total': matched.length,
+      }),
+    );
+  }
+
+  _FakeResponse _snapshotCreate(String? auth, Map<String, Object?> body) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无生成权限'));
+    }
+    final period = body['period'];
+    final scope = body['scope'];
+    if (period is! String || scope != 'company' && scope != 'business_user') {
+      return _FakeResponse(400, _error('VALIDATION_FAILED', '参数不合法'));
+    }
+    var inbound = Amount.parse('0');
+    var outbound = Amount.parse('0');
+    var count = 0;
+    for (final doc in _documents.values) {
+      if (doc.groupId != caller.groupId || doc.status != 'submitted') continue;
+      if (_monthOf(doc.businessDate) != period) continue;
+      count++;
+      if (doc.kind == 'inbound') {
+        inbound = inbound.add(doc.totalAmount);
+      } else {
+        outbound = outbound.add(doc.totalAmount);
+      }
+    }
+    final compact = period.replaceAll('-', '');
+    final id = _nextSnapshotId++;
+    final snapshotNo = 'ZJS$compact-${_pad(id, 4)}';
+    final snapshot = _FakeSnapshot(
+      id: id,
+      groupId: caller.groupId,
+      snapshotNo: snapshotNo,
+      batchNo: snapshotNo,
+      scope: scope as String,
+      period: period,
+      businessUserId: scope == 'business_user' ? caller.userId : null,
+      inbound: inbound,
+      outbound: outbound,
+      grossProfit: outbound.sub(inbound),
+      documentCount: count,
+      remark: body['remark'] as String?,
+      createdByUserId: caller.userId,
+      createdAt: DateTime.utc(2026, 9, 22, 16),
+    );
+    _snapshots[id] = snapshot;
+    return _FakeResponse(
+      201,
+      _ok(<String, Object?>{
+        'batch_no': snapshot.batchNo,
+        'period': period,
+        'snapshots': <Object?>[_snapshotJson(snapshot)],
+      }),
+    );
+  }
+
+  /// 结清视图：路径尾段是 document_id。
+  _FakeResponse _statementHandler(String? auth, String path) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    final rest = path.split('/').where((part) => part.isNotEmpty).toList();
+    final documentId = int.tryParse(rest.last);
+    final doc = documentId == null ? null : _documents[documentId];
+    if (doc == null || doc.groupId != caller.groupId) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '单据不存在'));
+    }
+    return _FakeResponse(200, _ok(_statementJson(doc)));
+  }
+
+  /// 单张快照详情。
+  _FakeResponse _snapshotDetail(String? auth, String path) {
+    final caller = _caller(auth);
+    if (caller == null) {
+      return _FakeResponse(401, _error('AUTH_INVALID_CREDENTIALS', '未登录'));
+    }
+    if (!_hasReportPermission(caller)) {
+      return _FakeResponse(403, _error('FORBIDDEN', '无查看报表权限'));
+    }
+    final rest = path.split('/').where((part) => part.isNotEmpty).toList();
+    final id = int.tryParse(rest.last);
+    final snapshot = id == null ? null : _snapshots[id];
+    if (snapshot == null || snapshot.groupId != caller.groupId) {
+      return _FakeResponse(404, _error('RESOURCE_NOT_FOUND', '快照不存在'));
+    }
+    return _FakeResponse(200, _ok(_snapshotJson(snapshot)));
+  }
+
+  /// 人民币大写：测试替身只覆盖「整数元 + 角分」的常用场景，避免把 rmb 算法搬进来。
+  String _upper(Amount amount) => '人民币${amount.format()}元';
+
   /// 只暴露「有几类资源」的无害摘要；**绝不打印任何秘密**。
   @override
   String toString() =>
@@ -1292,6 +2707,15 @@ final class _FakeResponse {
   final int status;
   final Map<String, Object?> payload;
 }
+
+/// 解析出的租户调用者身份（用户名 / 账号类型 / 用户 id / 显示名 / 所属组）。
+typedef _Caller = ({
+  String username,
+  String accountType,
+  int userId,
+  String displayName,
+  int groupId,
+});
 
 final class _FakeGroup {
   _FakeGroup({
@@ -1376,4 +2800,220 @@ final class _FakeDictionary {
   final String? contactPhone;
   String status;
   int version;
+}
+
+final class _FakeDocument {
+  _FakeDocument({
+    required this.id,
+    required this.groupId,
+    required this.kind,
+    required this.documentNo,
+    required this.status,
+    required this.businessUserId,
+    required this.businessDate,
+    required this.totalAmount,
+    required this.version,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.parties,
+    this.shippingUnit,
+    this.saleAmountType,
+    this.remark,
+    this.submittedAt,
+  });
+
+  final int id;
+  final int groupId;
+  final String kind;
+  final String documentNo;
+  String status;
+  final int businessUserId;
+  String businessDate;
+  String? shippingUnit;
+  String? saleAmountType;
+  Amount totalAmount;
+  String? remark;
+  int version;
+  String? submittedAt;
+  DateTime createdAt;
+  DateTime updatedAt;
+  List<_FakeParty> parties;
+}
+
+final class _FakeParty {
+  _FakeParty({
+    required this.id,
+    required this.position,
+    required this.name,
+    required this.contactPhone,
+    required this.subtotal,
+    required this.items,
+  });
+
+  final int id;
+  final int position;
+  final String name;
+  final String? contactPhone;
+  Amount subtotal;
+  List<_FakeItem> items;
+}
+
+final class _FakeItem {
+  _FakeItem({
+    required this.id,
+    required this.position,
+    required this.productName,
+    required this.productModel,
+    required this.unit,
+    required this.quantity,
+    required this.weight,
+    required this.unitPrice,
+    required this.priceTaxMode,
+    required this.amount,
+    required this.remark,
+  });
+
+  final int id;
+  final int position;
+  final String productName;
+  final String? productModel;
+  final String? unit;
+  final String quantity;
+  final String? weight;
+  final String unitPrice;
+  final String priceTaxMode;
+  final Amount amount;
+  final String? remark;
+}
+
+final class _FakeSettlement {
+  _FakeSettlement({
+    required this.id,
+    required this.groupId,
+    required this.settlementNo,
+    required this.status,
+    required this.requesterUserId,
+    required this.inboundTotal,
+    required this.outboundTotal,
+    required this.grossProfit,
+    required this.version,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.sources,
+    this.remark,
+  });
+
+  final int id;
+  final int groupId;
+  final String settlementNo;
+  String status;
+  final int requesterUserId;
+  String? remark;
+  Amount inboundTotal;
+  Amount outboundTotal;
+  Amount grossProfit;
+  int version;
+  String? decidedAt;
+  int? decidedByUserId;
+  String? decisionRemark;
+  DateTime createdAt;
+  DateTime updatedAt;
+  final List<_FakeSettlementSource> sources;
+  final List<Map<String, Object?>> approvalRecords = <Map<String, Object?>>[];
+}
+
+final class _FakeSettlementSource {
+  _FakeSettlementSource({
+    required this.documentId,
+    required this.kind,
+    required this.documentNo,
+    required this.businessUserId,
+    required this.businessDate,
+    required this.amount,
+    required this.released,
+  });
+
+  final int documentId;
+  final String kind;
+  final String documentNo;
+  final int businessUserId;
+  final String businessDate;
+  final Amount amount;
+  bool released;
+}
+
+final class _FakeFinanceRecord {
+  _FakeFinanceRecord({
+    required this.id,
+    required this.groupId,
+    required this.kind,
+    required this.documentId,
+    required this.documentKind,
+    required this.documentNo,
+    required this.partyName,
+    required this.businessUserId,
+    required this.businessDate,
+    required this.amount,
+    required this.occurredOn,
+    required this.method,
+    required this.methodNote,
+    required this.cardTail,
+    required this.invoiceNo,
+    required this.remark,
+    required this.createdByUserId,
+    required this.createdAt,
+  });
+
+  final int id;
+  final int groupId;
+  final String kind;
+  final int documentId;
+  final String documentKind;
+  final String documentNo;
+  final String partyName;
+  final int businessUserId;
+  final String businessDate;
+  final Amount amount;
+  final String occurredOn;
+  final String? method;
+  final String? methodNote;
+  final String? cardTail;
+  final String? invoiceNo;
+  final String? remark;
+  final int createdByUserId;
+  final DateTime createdAt;
+}
+
+final class _FakeSnapshot {
+  _FakeSnapshot({
+    required this.id,
+    required this.groupId,
+    required this.snapshotNo,
+    required this.batchNo,
+    required this.scope,
+    required this.period,
+    required this.businessUserId,
+    required this.inbound,
+    required this.outbound,
+    required this.grossProfit,
+    required this.documentCount,
+    required this.remark,
+    required this.createdByUserId,
+    required this.createdAt,
+  });
+
+  final int id;
+  final int groupId;
+  final String snapshotNo;
+  final String batchNo;
+  final String scope;
+  final String period;
+  final int? businessUserId;
+  final Amount inbound;
+  final Amount outbound;
+  final Amount grossProfit;
+  final int documentCount;
+  final String? remark;
+  final int createdByUserId;
+  final DateTime createdAt;
 }
