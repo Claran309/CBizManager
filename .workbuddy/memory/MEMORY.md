@@ -252,6 +252,15 @@
   - `core/bizdate/bizdate.dart`：`parseDate` 兼容 5 种写法+回读校验、`parseMonth` 只收
     `YYYY-MM`（月份不补零）、`formatMonth`/`formatMonthCompact`。
   新模块（单据/结算/财务/报表）一律用这两个包，不要再各写一套。
+- **⚠️ 新增模块的 Repository Provider 必须回头检查 `session_scope` 有没有装配**：
+  `session_scope.dart` 只装配 platform/member/dictionary/invitation 的话，新模块的
+  页面在真实 app 里一打开就抛 `StateError('... has not been configured')` ——
+  而**页面测试各自 override 了 provider，所以全绿，会掩盖生产装配缺口**。
+  2026-09-26 就踩了这个：document/settlement/finance/report 四个模块的 provider
+  全部漏装（`f4921ea` 才补上）。判据：真实 app 壳（`CBizDocsApp`）里能不能打开该页；
+  `session_scope_test` 要断言「租户会话装配了哪些、平台管理员读不到哪些」。
+  装配取舍：报表按 `report.view` 裁剪（纵深防御，同邀请码）；财务**不**按
+  `finance.record` 裁剪（结清视图是「看单据」的延伸，登记资格由服务端逐请求校验）。
 ## Flutter 路由与守卫（client/lib/app/router.dart）
 
 - **12 条稳定路由**：`/splash` `/login` `/register` `/change-password`
