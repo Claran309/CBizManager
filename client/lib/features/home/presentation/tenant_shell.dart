@@ -24,6 +24,9 @@ List<AppDestination> tenantDestinations(AuthProfile? profile) {
     _outboundDestination,
     // 结算单：业务员申请自己的、审批人看全组（数据范围后端收敛），恒在。
     _settlementsDestination,
+    // 报表看板：汇总统计的可见范围是「全组」，需要 report.view 权限，
+    // 无权限时后端直接 403（不返回空报表），所以这里也不给假入口。
+    if (profile.hasPermission('report.view')) _reportsDestination,
     // 邀请码决定「谁能进这个组」，只有组主账号该看见它。
     // 守卫里的 owner-only 规则负责最终裁决，这里只负责不给普通成员一个
     // 「点了会被弹回首页」的假入口。
@@ -61,6 +64,12 @@ const AppDestination _settlementsDestination = AppDestination(
   label: '结算单',
   icon: Icons.receipt_long_outlined,
   route: '/settlements',
+);
+
+const AppDestination _reportsDestination = AppDestination(
+  label: '报表',
+  icon: Icons.insights_outlined,
+  route: '/reports',
 );
 
 const AppDestination _invitationsDestination = AppDestination(

@@ -450,6 +450,10 @@ void main() {
         '/documents/outbound/:documentId',
         '/settlements',
         '/settlements/:settlementId',
+        '/reports',
+        '/reports/inbound-stats',
+        '/reports/outbound-stats',
+        '/reports/summary-settlements',
       ]),
     );
     // `/platform/groups/new` 会被 `/platform/groups/:groupId` 一并匹配，

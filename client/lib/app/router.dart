@@ -15,6 +15,9 @@ import 'package:c_biz_docs_manager/features/members/presentation/members_page.da
 import 'package:c_biz_docs_manager/features/platform/presentation/create_group_page.dart';
 import 'package:c_biz_docs_manager/features/platform/presentation/platform_group_detail_page.dart';
 import 'package:c_biz_docs_manager/features/platform/presentation/platform_groups_page.dart';
+import 'package:c_biz_docs_manager/features/reports/presentation/report_overview_page.dart';
+import 'package:c_biz_docs_manager/features/reports/presentation/report_stats_page.dart';
+import 'package:c_biz_docs_manager/features/reports/presentation/summary_settlements_page.dart';
 import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_detail_page.dart';
 import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_list_page.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +47,12 @@ bool isOwnerOnlyLocation(String path) =>
 
 /// 成员管理入口。组主账号隐式允许，普通成员需 `member.manage`。
 bool isMemberManagementLocation(String path) => path == '/members';
+
+/// 报表区域。汇总统计的可见范围是「全组」，需要 `report.view`。
+///
+/// 用 `startsWith('/reports/')` 覆盖子页（统计 / 总结算），避免新增子路由时漏判。
+bool isReportLocation(String path) =>
+    path == '/reports' || path.startsWith('/reports/');
 
 /// 当前身份的「角色首页」。
 ///
@@ -118,6 +127,11 @@ String? authRedirect(AuthState auth, String location) {
   // 内部已处理），普通成员则必须拿到服务端显式下发的 member.manage。
   if (isMemberManagementLocation(location) &&
       !profile.hasPermission('member.manage')) {
+    return home;
+  }
+
+  // 7.5 报表区域：汇总统计范围是「全组」，需要 report.view。
+  if (isReportLocation(location) && !profile.hasPermission('report.view')) {
     return home;
   }
 
@@ -369,6 +383,27 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
                 'settlement-${state.pathParameters['settlementId']}',
               ),
             ),
+      ),
+      // 报表：看板 + 入库/出库统计 + 总结算快照。入口与守卫都按 report.view。
+      GoRoute(
+        path: '/reports',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ReportOverviewPage(),
+      ),
+      GoRoute(
+        path: '/reports/inbound-stats',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ReportStatsPage(kind: DocumentKind.inbound),
+      ),
+      GoRoute(
+        path: '/reports/outbound-stats',
+        builder: (BuildContext context, GoRouterState state) =>
+            const ReportStatsPage(kind: DocumentKind.outbound),
+      ),
+      GoRoute(
+        path: '/reports/summary-settlements',
+        builder: (BuildContext context, GoRouterState state) =>
+            const SummarySettlementsPage(),
       ),
     ],
   );

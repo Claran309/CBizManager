@@ -21,12 +21,13 @@ void main() {
   /* -------------------------------------------------------- 导航裁剪 */
 
   group('租户导航裁剪', () {
-    test('组主账号得到 首页 / 入库单 / 出库单 / 结算单 / 邀请码 / 成员 / 字典', () {
+    test('组主账号得到 首页 / 入库单 / 出库单 / 结算单 / 报表 / 邀请码 / 成员 / 字典', () {
       expect(_routesOf(ownerProfile()), <String>[
         '/home',
         '/documents/inbound',
         '/documents/outbound',
         '/settlements',
+        '/reports',
         '/invitations',
         '/members',
         '/dictionaries',
@@ -36,6 +37,7 @@ void main() {
         '入库单',
         '出库单',
         '结算单',
+        '报表',
         '邀请码',
         '成员',
         '字典',
@@ -51,7 +53,7 @@ void main() {
       expect(_routesOf(profile), contains('/members'));
     });
 
-    test('普通成员只有 首页 / 入库单 / 出库单 / 结算单 / 字典', () {
+    test('普通成员只有 首页 / 入库单 / 出库单 / 结算单 / 字典（无报表）', () {
       expect(_routesOf(memberProfile()), <String>[
         '/home',
         '/documents/inbound',
@@ -59,6 +61,15 @@ void main() {
         '/settlements',
         '/dictionaries',
       ]);
+      // 报表汇总范围是「全组」，默认业务员没有 report.view。
+      expect(_routesOf(memberProfile()), isNot(contains('/reports')));
+    });
+
+    test('拿到 report.view 的普通成员多一个「报表」', () {
+      final routes = _routesOf(
+        memberProfile(permissionCodes: const <String>['report.view']),
+      );
+      expect(routes, contains('/reports'));
     });
 
     test('拿到 member.manage 的普通成员多一个「成员」，但永远没有「邀请码」', () {
@@ -120,7 +131,7 @@ void main() {
       expect(find.text('TOKEN-MUST-NOT-RENDER'), findsNothing);
     });
 
-    testWidgets('主账号看到全部六项导航', (WidgetTester tester) async {
+    testWidgets('主账号看到全部八项导航', (WidgetTester tester) async {
       await pumpRealApp(
         tester,
         repository: FakeAuthRepository(session: ownerSession()),
@@ -130,12 +141,14 @@ void main() {
       expectDestination('首页', visible: true);
       expectDestination('入库单', visible: true);
       expectDestination('出库单', visible: true);
+      expectDestination('结算单', visible: true);
+      expectDestination('报表', visible: true);
       expectDestination('邀请码', visible: true);
       expectDestination('成员', visible: true);
       expectDestination('字典', visible: true);
     });
 
-    testWidgets('普通成员看到 首页 / 入库单 / 出库单 / 字典，看不见成员与邀请码', (
+    testWidgets('普通成员看到 首页 / 入库单 / 出库单 / 结算单 / 字典，看不见成员、邀请码与报表', (
       WidgetTester tester,
     ) async {
       await pumpRealApp(
@@ -147,9 +160,11 @@ void main() {
       expectDestination('首页', visible: true);
       expectDestination('入库单', visible: true);
       expectDestination('出库单', visible: true);
+      expectDestination('结算单', visible: true);
       expectDestination('字典', visible: true);
       expectDestination('成员', visible: false);
       expectDestination('邀请码', visible: false);
+      expectDestination('报表', visible: false);
     });
 
     testWidgets('拿到 member.manage 的普通成员多看到「成员」，仍看不到「邀请码」', (
