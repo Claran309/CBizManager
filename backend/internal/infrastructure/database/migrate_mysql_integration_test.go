@@ -4,7 +4,9 @@ package database
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -62,12 +64,26 @@ func TestMySQLMigrationSerializesIndependentConnectionPools(t *testing.T) {
 		t.Fatalf("migration lock probe row count = %d, want 1", count)
 	}
 	var lockIsFree sql.NullInt64
-	if err := firstDB.QueryRow(`SELECT IS_FREE_LOCK(?)`, mysqlMigrationLockName).Scan(&lockIsFree); err != nil {
+	// 迁移锁名是按库派生的（见 migrate.go 的 migrationLockName），这里要复现同样的
+	// 派生规则，不能再用旧的全局常量名断言。
+	lockName := mysqlMigrationLockNameForTest(t, firstDB)
+	if err := firstDB.QueryRow(`SELECT IS_FREE_LOCK(?)`, lockName).Scan(&lockIsFree); err != nil {
 		t.Fatalf("check migration lock release: %v", err)
 	}
 	if !lockIsFree.Valid || lockIsFree.Int64 != 1 {
 		t.Fatalf("migration lock free state = %+v, want 1", lockIsFree)
 	}
+}
+
+// mysqlMigrationLockNameForTest 复现生产代码的按库锁名派生，供断言使用。
+func mysqlMigrationLockNameForTest(t *testing.T, db *sql.DB) string {
+	t.Helper()
+	var schema sql.NullString
+	if err := db.QueryRow(`SELECT DATABASE()`).Scan(&schema); err != nil {
+		t.Fatalf("read current database: %v", err)
+	}
+	digest := sha256.Sum256([]byte(schema.String))
+	return mysqlMigrationLockPrefix + hex.EncodeToString(digest[:8])
 }
 
 func TestMySQLMigrationLeavesDirtyMarkerAfterDDLFailure(t *testing.T) {
