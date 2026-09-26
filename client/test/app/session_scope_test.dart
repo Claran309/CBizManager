@@ -5,11 +5,15 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_controller.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/data/dictionary_repository.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/domain/dictionary_entry.dart';
+import 'package:c_biz_docs_manager/features/documents/data/document_repository.dart';
+import 'package:c_biz_docs_manager/features/finance/data/finance_repository.dart';
 import 'package:c_biz_docs_manager/features/invitations/data/invitation_repository.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
 import 'package:c_biz_docs_manager/features/members/domain/member.dart';
 import 'package:c_biz_docs_manager/features/platform/data/platform_repository.dart';
+import 'package:c_biz_docs_manager/features/reports/data/report_repository.dart';
+import 'package:c_biz_docs_manager/features/settlements/data/settlement_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // `Override` / `ProviderException` 这两个类型名在 Riverpod 3 里被挪进了 misc.dart，
@@ -126,6 +130,80 @@ void main() {
     expect(() => scope.read(memberRepositoryProvider), _throwsStateError);
     expect(() => scope.read(dictionaryRepositoryProvider), _throwsStateError);
     expect(() => scope.read(invitationRepositoryProvider), _throwsStateError);
+    // 业务单据 / 结算 / 财务 / 报表同理：平台管理员不该读到任何租户业务数据。
+    expect(
+      () => scope.read(inboundDocumentRepositoryProvider),
+      _throwsStateError,
+    );
+    expect(
+      () => scope.read(outboundDocumentRepositoryProvider),
+      _throwsStateError,
+    );
+    expect(() => scope.read(settlementRepositoryProvider), _throwsStateError);
+    expect(() => scope.read(paymentRepositoryProvider), _throwsStateError);
+    expect(() => scope.read(receiptRepositoryProvider), _throwsStateError);
+    expect(() => scope.read(invoiceRepositoryProvider), _throwsStateError);
+    expect(() => scope.read(reportRepositoryProvider), _throwsStateError);
+  });
+
+  test('租户会话装配单据 / 结算 / 财务仓储；报表按 report.view 裁剪', () {
+    final ownerScope = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(ownerSession()),
+    );
+    addTearDown(ownerScope.dispose);
+
+    // 单据与结算是业务核心，所有租户用户都要能读写。
+    expect(
+      ownerScope.read(inboundDocumentRepositoryProvider),
+      isA<DioDocumentRepository>(),
+    );
+    expect(
+      ownerScope.read(outboundDocumentRepositoryProvider),
+      isA<DioDocumentRepository>(),
+    );
+    expect(
+      ownerScope.read(settlementRepositoryProvider),
+      isA<DioSettlementRepository>(),
+    );
+    // 财务三类各一个实例（kind 由装配决定）；结清视图是「看单据」的延伸，
+    // 所以不按 finance.record 裁剪装配 —— 登记资格由服务端逐请求校验。
+    expect(
+      ownerScope.read(paymentRepositoryProvider),
+      isA<DioFinanceRepository>(),
+    );
+    expect(
+      ownerScope.read(receiptRepositoryProvider),
+      isA<DioFinanceRepository>(),
+    );
+    expect(
+      ownerScope.read(invoiceRepositoryProvider),
+      isA<DioFinanceRepository>(),
+    );
+    // 主账号隐式持有 report.view。
+    expect(
+      ownerScope.read(reportRepositoryProvider),
+      isA<DioReportRepository>(),
+    );
+
+    // 普通业务员没有 report.view ⇒ 报表仓储不装配（读取抛错），
+    // 与邀请码同一套纵深防御：入口被守卫挡住，装配层再挡一道。
+    final plainMember = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(memberSession()),
+    );
+    addTearDown(plainMember.dispose);
+    expect(() => plainMember.read(reportRepositoryProvider), _throwsStateError);
+
+    // 被授予 report.view 的业务员就能读到。
+    final reporter = ProviderContainer(
+      parent: app,
+      overrides: overridesFor(
+        memberSession(permissionCodes: const <String>['report.view']),
+      ),
+    );
+    addTearDown(reporter.dispose);
+    expect(reporter.read(reportRepositoryProvider), isA<DioReportRepository>());
   });
 
   test('邀请码仓储只装配给组主账号', () {

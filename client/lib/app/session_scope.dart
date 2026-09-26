@@ -2,10 +2,16 @@ import 'package:c_biz_docs_manager/core/auth/auth_models.dart';
 import 'package:c_biz_docs_manager/core/database/app_database.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/application/dictionary_controller.dart';
 import 'package:c_biz_docs_manager/features/dictionaries/data/dictionary_repository.dart';
+import 'package:c_biz_docs_manager/features/documents/data/document_repository.dart';
+import 'package:c_biz_docs_manager/features/documents/domain/document.dart';
+import 'package:c_biz_docs_manager/features/finance/data/finance_repository.dart';
+import 'package:c_biz_docs_manager/features/finance/domain/finance.dart';
 import 'package:c_biz_docs_manager/features/invitations/data/invitation_repository.dart';
 import 'package:c_biz_docs_manager/features/members/application/member_controller.dart';
 import 'package:c_biz_docs_manager/features/members/data/member_repository.dart';
 import 'package:c_biz_docs_manager/features/platform/data/platform_repository.dart';
+import 'package:c_biz_docs_manager/features/reports/data/report_repository.dart';
+import 'package:c_biz_docs_manager/features/settlements/data/settlement_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -173,6 +179,34 @@ List<Override> _sessionOverrides({
       invitationRepositoryProvider.overrideWithValue(
         DioInvitationRepository(appDio),
       ),
+    // 单据：入库 / 出库各一个实例（kind 由装配决定，路径前缀据此拼）。
+    inboundDocumentRepositoryProvider.overrideWithValue(
+      DioDocumentRepository(appDio, DocumentKind.inbound),
+    ),
+    outboundDocumentRepositoryProvider.overrideWithValue(
+      DioDocumentRepository(appDio, DocumentKind.outbound),
+    ),
+    // 结算单：业务员申请本人的、审批人看全组，数据范围由服务端收敛。
+    settlementRepositoryProvider.overrideWithValue(
+      DioSettlementRepository(appDio),
+    ),
+    // 财务：付款 / 收款 / 开票各一个实例（kind 由装配决定）。
+    // 登记资格（finance.record）由服务端逐请求校验，装配层不做权限裁剪 ——
+    // 结清视图本身是「看单据」的延伸，任何能看该单据的人都该读到。
+    paymentRepositoryProvider.overrideWithValue(
+      DioFinanceRepository(appDio, FinanceKind.payment),
+    ),
+    receiptRepositoryProvider.overrideWithValue(
+      DioFinanceRepository(appDio, FinanceKind.receipt),
+    ),
+    invoiceRepositoryProvider.overrideWithValue(
+      DioFinanceRepository(appDio, FinanceKind.invoice),
+    ),
+    // 报表汇总统计的可见范围是「全组」，需要 report.view。与邀请码同样的思路：
+    // 没有该权限时不装配 —— 读取立刻抛 StateError，而不是悄悄退化成某个默认实现。
+    // 界面入口那一侧由路由守卫挡住（isReportLocation），装配层这一侧再挡一道。
+    if (profile.hasPermission('report.view'))
+      reportRepositoryProvider.overrideWithValue(DioReportRepository(appDio)),
   ];
 }
 
