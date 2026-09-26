@@ -450,6 +450,7 @@ void main() {
         '/documents/outbound/:documentId',
         '/settlements',
         '/settlements/:settlementId',
+        '/finance/statements/:documentId',
         '/reports',
         '/reports/inbound-stats',
         '/reports/outbound-stats',

@@ -8,6 +8,7 @@ import 'package:c_biz_docs_manager/features/dictionaries/presentation/dictionari
 import 'package:c_biz_docs_manager/features/documents/domain/document.dart';
 import 'package:c_biz_docs_manager/features/documents/presentation/document_form_page.dart';
 import 'package:c_biz_docs_manager/features/documents/presentation/document_history_page.dart';
+import 'package:c_biz_docs_manager/features/finance/presentation/finance_statement_page.dart';
 import 'package:c_biz_docs_manager/features/home/presentation/tenant_home_page.dart';
 import 'package:c_biz_docs_manager/features/invitations/presentation/invitations_page.dart';
 import 'package:c_biz_docs_manager/features/members/presentation/member_permissions_page.dart';
@@ -381,6 +382,20 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
                   parseSettlementId(state.pathParameters['settlementId']) ?? 0,
               key: ValueKey<String>(
                 'settlement-${state.pathParameters['settlementId']}',
+              ),
+            ),
+      ),
+      // 单据结清视图 + 财务登记入口。
+      GoRoute(
+        path: '/finance/statements/:documentId',
+        redirect: (BuildContext context, GoRouterState state) =>
+            documentRedirect(state.pathParameters['documentId']),
+        builder: (BuildContext context, GoRouterState state) =>
+            FinanceStatementPage(
+              documentId:
+                  parseDocumentId(state.pathParameters['documentId']) ?? 0,
+              key: ValueKey<String>(
+                'finance-statement-${state.pathParameters['documentId']}',
               ),
             ),
       ),

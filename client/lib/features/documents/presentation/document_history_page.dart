@@ -201,9 +201,18 @@ class _DocumentTable extends StatelessWidget {
                 DataCell(Text(item.partyNames.join('、'))),
                 DataCell(Text(item.totalAmount.format())),
                 DataCell(
-                  TextButton(
-                    onPressed: () => _openDetail(context, item),
-                    child: const Text('查看'),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      TextButton(
+                        onPressed: () => _openDetail(context, item),
+                        child: const Text('查看'),
+                      ),
+                      TextButton(
+                        onPressed: () => _openStatement(context, item),
+                        child: const Text('结清'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -231,12 +240,28 @@ class _DocumentCard extends StatelessWidget {
         subtitle: Text(
           '${_formatDate(item.businessDate)} · ${item.partyNames.join('、')}',
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Text(item.totalAmount.format(), style: theme.textTheme.titleMedium),
-            Text(_statusLabel(item.status), style: theme.textTheme.bodySmall),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Text(
+                  item.totalAmount.format(),
+                  style: theme.textTheme.titleMedium,
+                ),
+                Text(
+                  _statusLabel(item.status),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+            IconButton(
+              tooltip: '结清视图',
+              onPressed: () => _openStatement(context, item),
+              icon: const Icon(Icons.receipt_outlined),
+            ),
           ],
         ),
         onTap: () => _openDetail(context, item),
@@ -248,6 +273,11 @@ class _DocumentCard extends StatelessWidget {
 void _openDetail(BuildContext context, DocumentSummary item) {
   final segment = item.kind == DocumentKind.outbound ? 'outbound' : 'inbound';
   context.go('/documents/$segment/${item.documentId}');
+}
+
+/// 打开该单据的结清视图（已付/未付或已收/未收 + 财务登记入口）。
+void _openStatement(BuildContext context, DocumentSummary item) {
+  context.go('/finance/statements/${item.documentId}');
 }
 
 String _statusLabel(DocumentStatus status) => switch (status) {
