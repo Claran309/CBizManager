@@ -103,6 +103,11 @@
 
 ## GORM / MySQL 方言坑（SQLite 单测查不出，必须真跑 MySQL）
 
+- **`GET_LOCK` 名字是 MySQL 服务器级的**（与当前 database 无关）。做「迁移互斥锁」这类
+  跨进程同步时，若用全局常量名，同一台 MySQL 上不同库会互相抢锁——`go test ./...` 并行
+  跑多包（各包迁移自己的 `*_test_*` 库）时，某个包的「锁已释放」断言会被无关持锁者打翻，
+  表现为**单独跑该包通过、全量并行跑失败**。修法：锁名按库派生（`前缀 + sha256(库名)前8字节hex`），
+  同库仍互斥、跨库解耦，还能绕开 MySQL user-level lock 名字 64 字符上限。
 - **`groups` 是 MySQL 8.0 保留字**（窗口函数的 `GROUPS` 帧单位）。GORM `Table()` 有两条分支：
   - 传**不含空格/反引号**的纯表名 → 走标识符引用路径，自动加反引号并正确设置 `Statement.Table`。
     实测 `Table("groups")` + `First()` → ``FROM `groups` WHERE id = ? ORDER BY `groups`.`id` LIMIT ?`` ✅
