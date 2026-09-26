@@ -1,0 +1,555 @@
+{
+  "create_group": {
+    "group": {
+      "id": 3,
+      "name": "联调组410752"
+    },
+    "owner": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    }
+  },
+  "document_detail": {
+    "business_date": "2026-09-22",
+    "business_user": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "created_at": "2026-09-26T08:19:13.12Z",
+    "document_id": 5,
+    "document_no": "RK20260922-0001",
+    "kind": "inbound",
+    "parties": [
+      {
+        "contact_phone": null,
+        "items": [
+          {
+            "amount": "100000.00",
+            "item_id": 5,
+            "position": 1,
+            "price_tax_mode": "tax_included",
+            "product_model": "HRB400",
+            "product_name": "螺纹钢",
+            "quantity": "10.000",
+            "remark": null,
+            "unit": "吨",
+            "unit_price": "10000.0000",
+            "weight": null
+          }
+        ],
+        "party_id": 5,
+        "party_name": "华东钢贸",
+        "position": 1,
+        "subtotal": "100000.00"
+      }
+    ],
+    "remark": null,
+    "sale_amount_type": null,
+    "shipping_unit": null,
+    "status": "draft",
+    "submitted_at": null,
+    "total_amount": "100000.00",
+    "total_amount_upper": "RMB壹拾万元整",
+    "updated_at": "2026-09-26T08:19:13.12Z",
+    "version": 1
+  },
+  "document_list": {
+    "items": [
+      {
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": ""
+        },
+        "created_at": "2026-09-26T08:19:13.12Z",
+        "document_id": 5,
+        "document_no": "RK20260922-0001",
+        "item_count": 1,
+        "kind": "inbound",
+        "party_names": [
+          "华东钢贸"
+        ],
+        "sale_amount_type": null,
+        "shipping_unit": null,
+        "status": "submitted",
+        "submitted_at": "2026-09-26T08:19:13.157404Z",
+        "total_amount": "100000.00",
+        "updated_at": "2026-09-26T08:19:13.157404Z",
+        "version": 2
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "total": 1
+  },
+  "owner_me": {
+    "group": {
+      "id": 3,
+      "name": "联调组410752"
+    },
+    "member_type": "owner",
+    "must_change_password": false,
+    "permission_codes": [],
+    "user": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    }
+  },
+  "report_inbound_stats": {
+    "amount_total": "100000.00",
+    "amount_total_upper": "RMB壹拾万元整",
+    "document_count": 1,
+    "invoiced_amount": "50000.00",
+    "items": [
+      {
+        "amount": "100000.00",
+        "amount_upper": "RMB壹拾万元整",
+        "document_count": 1,
+        "party_name": "华东钢贸",
+        "product_model": "HRB400",
+        "product_name": "螺纹钢",
+        "quantity": "10.000",
+        "unit": "吨"
+      }
+    ],
+    "page": 1,
+    "page_size": 20,
+    "paid_amount": "30000.00",
+    "period": "2026-09",
+    "supplier_count": 1,
+    "total": 1,
+    "uninvoiced_amount": "50000.00",
+    "uninvoiced_amount_upper": "RMB伍万元整",
+    "uninvoiced_document_count": 1,
+    "unpaid_amount": "70000.00",
+    "unpaid_amount_upper": "RMB柒万元整",
+    "unpaid_document_count": 1
+  },
+  "report_overview": {
+    "customer_count": 1,
+    "gross_margin_percent": "16.67",
+    "gross_margin_ppm": 166667,
+    "gross_profit": "20000.00",
+    "gross_profit_upper": "RMB贰万元整",
+    "inbound_amount": "100000.00",
+    "inbound_amount_upper": "RMB壹拾万元整",
+    "inbound_document_count": 1,
+    "invoiced_amount": "50000.00",
+    "outbound_amount": "120000.00",
+    "outbound_amount_upper": "RMB壹拾贰万元整",
+    "outbound_document_count": 1,
+    "paid_amount": "30000.00",
+    "period": "2026-09",
+    "received_amount": "40000.00",
+    "sale_amount_types": [
+      {
+        "amount": "120000.00",
+        "amount_upper": "RMB壹拾贰万元整",
+        "sale_amount_type": "Y-1",
+        "share_percent": "100.00",
+        "share_ppm": 1000000
+      },
+      {
+        "amount": "0.00",
+        "amount_upper": "RMB零元整",
+        "sale_amount_type": "y-N",
+        "share_percent": "0.00",
+        "share_ppm": 0
+      },
+      {
+        "amount": "0.00",
+        "amount_upper": "RMB零元整",
+        "sale_amount_type": "N",
+        "share_percent": "0.00",
+        "share_ppm": 0
+      }
+    ],
+    "supplier_count": 1,
+    "uninvoiced_amount": "50000.00",
+    "uninvoiced_amount_upper": "RMB伍万元整",
+    "uninvoiced_document_count": 1,
+    "unpaid_amount": "70000.00",
+    "unpaid_amount_upper": "RMB柒万元整",
+    "unpaid_document_count": 1,
+    "unreceived_amount": "80000.00",
+    "unreceived_amount_upper": "RMB捌万元整",
+    "unreceived_document_count": 1
+  },
+  "report_snapshot_create": {
+    "batch_no": "ZJS202609-0001",
+    "period": "2026-09",
+    "snapshots": [
+      {
+        "batch_no": "ZJS202609-0001",
+        "business_user": {
+          "account_type": "",
+          "display_name": "",
+          "id": 0,
+          "username": ""
+        },
+        "created_at": "2026-09-26T08:19:13.4922215Z",
+        "created_by": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_count": 2,
+        "gross_margin_percent": "16.67",
+        "gross_margin_ppm": 166667,
+        "gross_profit": "20000.00",
+        "gross_profit_upper": "RMB贰万元整",
+        "inbound_amount": "100000.00",
+        "inbound_amount_upper": "RMB壹拾万元整",
+        "outbound_amount": "120000.00",
+        "outbound_amount_upper": "RMB壹拾贰万元整",
+        "period": "2026-09",
+        "remark": null,
+        "sale_amount_types": [
+          {
+            "amount": "120000.00",
+            "amount_upper": "RMB壹拾贰万元整",
+            "sale_amount_type": "Y-1",
+            "share_percent": "100.00",
+            "share_ppm": 1000000
+          },
+          {
+            "amount": "0.00",
+            "amount_upper": "RMB零元整",
+            "sale_amount_type": "y-N",
+            "share_percent": "0.00",
+            "share_ppm": 0
+          },
+          {
+            "amount": "0.00",
+            "amount_upper": "RMB零元整",
+            "sale_amount_type": "N",
+            "share_percent": "0.00",
+            "share_ppm": 0
+          }
+        ],
+        "scope": "company",
+        "snapshot_id": 3,
+        "snapshot_no": "ZJS202609-0001"
+      }
+    ]
+  },
+  "settlement_approved": {
+    "approval_records": [
+      {
+        "action": "submitted",
+        "created_at": "2026-09-26T08:19:13.230517Z",
+        "operator": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "remark": "联调结算"
+      },
+      {
+        "action": "approved",
+        "created_at": "2026-09-26T08:19:13.284366Z",
+        "operator": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "remark": null
+      }
+    ],
+    "created_at": "2026-09-26T08:19:13.230517Z",
+    "decided_at": "2026-09-26T08:19:13.284366Z",
+    "decided_by": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "decision_remark": null,
+    "gross_profit": "20000.00",
+    "gross_profit_upper": "RMB贰万元整",
+    "inbound_total": "100000.00",
+    "inbound_total_upper": "RMB壹拾万元整",
+    "outbound_total": "120000.00",
+    "outbound_total_upper": "RMB壹拾贰万元整",
+    "remark": "联调结算",
+    "requester": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "settlement_id": 3,
+    "settlement_no": "JS202609-0001",
+    "source_count": 2,
+    "sources": [
+      {
+        "amount": "100000.00",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 5,
+        "document_no": "RK20260922-0001",
+        "kind": "inbound",
+        "released": false
+      },
+      {
+        "amount": "120000.00",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 6,
+        "document_no": "CK20260922-0001",
+        "kind": "outbound",
+        "released": false
+      }
+    ],
+    "status": "approved",
+    "updated_at": "2026-09-26T08:19:13.284366Z",
+    "version": 2
+  },
+  "settlement_detail_pending": {
+    "approval_records": [
+      {
+        "action": "submitted",
+        "created_at": "2026-09-26T08:19:13.230517Z",
+        "operator": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "remark": "联调结算"
+      }
+    ],
+    "created_at": "2026-09-26T08:19:13.230517Z",
+    "decided_at": null,
+    "decided_by": null,
+    "decision_remark": null,
+    "gross_profit": "20000.00",
+    "gross_profit_upper": "RMB贰万元整",
+    "inbound_total": "100000.00",
+    "inbound_total_upper": "RMB壹拾万元整",
+    "outbound_total": "120000.00",
+    "outbound_total_upper": "RMB壹拾贰万元整",
+    "remark": "联调结算",
+    "requester": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "settlement_id": 3,
+    "settlement_no": "JS202609-0001",
+    "source_count": 2,
+    "sources": [
+      {
+        "amount": "100000.00",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 5,
+        "document_no": "RK20260922-0001",
+        "kind": "inbound",
+        "released": false
+      },
+      {
+        "amount": "120000.00",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 6,
+        "document_no": "CK20260922-0001",
+        "kind": "outbound",
+        "released": false
+      }
+    ],
+    "status": "pending",
+    "updated_at": "2026-09-26T08:19:13.230517Z",
+    "version": 1
+  },
+  "statement_after_payment": {
+    "business_date": "2026-09-22",
+    "business_user": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "document_id": 5,
+    "document_kind": "inbound",
+    "document_no": "RK20260922-0001",
+    "invoice_count": 0,
+    "invoice_status": "none",
+    "invoiced_amount": "0.00",
+    "invoiced_amount_upper": "RMB零元整",
+    "paid_amount": "30000.00",
+    "paid_amount_upper": "RMB叁万元整",
+    "party_name": "华东钢贸",
+    "payment_count": 1,
+    "receipt_count": 0,
+    "received_amount": "0.00",
+    "received_amount_upper": "RMB零元整",
+    "records": [
+      {
+        "amount": "30000.00",
+        "amount_upper": "RMB叁万元整",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "card_tail": "1234",
+        "created_at": "2026-09-26T08:19:13.329339Z",
+        "created_by": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 5,
+        "document_kind": "inbound",
+        "document_no": "RK20260922-0001",
+        "invoice_no": null,
+        "kind": "payment",
+        "method": "private_card",
+        "method_note": null,
+        "occurred_on": "2026-09-22",
+        "party_name": "华东钢贸",
+        "record_id": 7,
+        "remark": null
+      }
+    ],
+    "total_amount": "100000.00",
+    "total_amount_upper": "RMB壹拾万元整",
+    "uninvoiced_amount": "100000.00",
+    "uninvoiced_amount_upper": "RMB壹拾万元整",
+    "unpaid_amount": "70000.00",
+    "unpaid_amount_upper": "RMB柒万元整",
+    "unreceived_amount": "0.00",
+    "unreceived_amount_upper": "RMB零元整"
+  },
+  "statement_before_payment": {
+    "business_date": "2026-09-22",
+    "business_user": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "document_id": 5,
+    "document_kind": "inbound",
+    "document_no": "RK20260922-0001",
+    "invoice_count": 0,
+    "invoice_status": "none",
+    "invoiced_amount": "0.00",
+    "invoiced_amount_upper": "RMB零元整",
+    "paid_amount": "0.00",
+    "paid_amount_upper": "RMB零元整",
+    "party_name": "华东钢贸",
+    "payment_count": 0,
+    "receipt_count": 0,
+    "received_amount": "0.00",
+    "received_amount_upper": "RMB零元整",
+    "records": [],
+    "total_amount": "100000.00",
+    "total_amount_upper": "RMB壹拾万元整",
+    "uninvoiced_amount": "100000.00",
+    "uninvoiced_amount_upper": "RMB壹拾万元整",
+    "unpaid_amount": "100000.00",
+    "unpaid_amount_upper": "RMB壹拾万元整",
+    "unreceived_amount": "0.00",
+    "unreceived_amount_upper": "RMB零元整"
+  },
+  "statement_outbound_receipt": {
+    "business_date": "2026-09-22",
+    "business_user": {
+      "account_type": "group_owner",
+      "display_name": "联调主账号",
+      "id": 6,
+      "username": "owner410752"
+    },
+    "document_id": 6,
+    "document_kind": "outbound",
+    "document_no": "CK20260922-0001",
+    "invoice_count": 0,
+    "invoice_status": "not_applicable",
+    "invoiced_amount": "0.00",
+    "invoiced_amount_upper": "RMB零元整",
+    "paid_amount": "0.00",
+    "paid_amount_upper": "RMB零元整",
+    "party_name": "华东客户",
+    "payment_count": 0,
+    "receipt_count": 1,
+    "received_amount": "40000.00",
+    "received_amount_upper": "RMB肆万元整",
+    "records": [
+      {
+        "amount": "40000.00",
+        "amount_upper": "RMB肆万元整",
+        "business_date": "2026-09-22",
+        "business_user": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "card_tail": null,
+        "created_at": "2026-09-26T08:19:13.386308Z",
+        "created_by": {
+          "account_type": "group_owner",
+          "display_name": "联调主账号",
+          "id": 6,
+          "username": "owner410752"
+        },
+        "document_id": 6,
+        "document_kind": "outbound",
+        "document_no": "CK20260922-0001",
+        "invoice_no": null,
+        "kind": "receipt",
+        "method": "transfer",
+        "method_note": null,
+        "occurred_on": "2026-09-22",
+        "party_name": "华东客户",
+        "record_id": 8,
+        "remark": null
+      }
+    ],
+    "total_amount": "120000.00",
+    "total_amount_upper": "RMB壹拾贰万元整",
+    "uninvoiced_amount": "0.00",
+    "uninvoiced_amount_upper": "RMB零元整",
+    "unpaid_amount": "0.00",
+    "unpaid_amount_upper": "RMB零元整",
+    "unreceived_amount": "80000.00",
+    "unreceived_amount_upper": "RMB捌万元整"
+  }
+}
