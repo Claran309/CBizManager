@@ -105,6 +105,15 @@ final class SettlementController extends Notifier<SettlementState> {
   /// 用当前筛选条件重新加载。
   Future<void> refresh() => load(_query);
 
+  /// 清空当前详情。
+  ///
+  /// 供「状态驱动导航」在跳走之后复位：申请结算成功后 `detail` 非空，页面据此
+  /// 跳到详情页；若不清掉，下次再进申请页会立刻被再弹走一次。
+  void clearDetail() {
+    if (_disposed) return;
+    state = state.copyWith(clearDetail: true);
+  }
+
   /// 加载某个结算单的详情。
   Future<void> loadDetail(int settlementId) async {
     if (_disposed) return;

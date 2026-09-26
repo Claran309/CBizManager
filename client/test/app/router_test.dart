@@ -449,6 +449,7 @@ void main() {
         '/documents/inbound/:documentId',
         '/documents/outbound/:documentId',
         '/settlements',
+        '/settlements/new',
         '/settlements/:settlementId',
         '/finance/statements/:documentId',
         '/reports',
@@ -471,6 +472,11 @@ void main() {
     expect(
       paths.indexOf('/documents/outbound/new'),
       lessThan(paths.indexOf('/documents/outbound/:documentId')),
+    );
+    // 结算同理：`new` 字面量必须排在 `:settlementId` 参数路由之前。
+    expect(
+      paths.indexOf('/settlements/new'),
+      lessThan(paths.indexOf('/settlements/:settlementId')),
     );
   });
 

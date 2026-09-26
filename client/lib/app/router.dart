@@ -19,6 +19,7 @@ import 'package:c_biz_docs_manager/features/platform/presentation/platform_group
 import 'package:c_biz_docs_manager/features/reports/presentation/report_overview_page.dart';
 import 'package:c_biz_docs_manager/features/reports/presentation/report_stats_page.dart';
 import 'package:c_biz_docs_manager/features/reports/presentation/summary_settlements_page.dart';
+import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_create_page.dart';
 import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_detail_page.dart';
 import 'package:c_biz_docs_manager/features/settlements/presentation/settlement_list_page.dart';
 import 'package:flutter/material.dart';
@@ -366,11 +367,16 @@ final routerProvider = Provider<GoRouter>((Ref ref) {
               ),
             ),
       ),
-      // 结算单：列表 + 详情审批。
+      // 结算单：列表 + 申请 + 详情审批。字面量 `new` 必须排在 `:settlementId` 之前。
       GoRoute(
         path: '/settlements',
         builder: (BuildContext context, GoRouterState state) =>
             const SettlementListPage(),
+      ),
+      GoRoute(
+        path: '/settlements/new',
+        builder: (BuildContext context, GoRouterState state) =>
+            const SettlementCreatePage(),
       ),
       GoRoute(
         path: '/settlements/:settlementId',

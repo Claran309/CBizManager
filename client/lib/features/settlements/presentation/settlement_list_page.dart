@@ -48,6 +48,11 @@ class _SettlementListPageState extends ConsumerState<SettlementListPage> {
           onPressed: _controller.refresh,
           icon: const Icon(Icons.refresh),
         ),
+        IconButton(
+          tooltip: '申请结算',
+          onPressed: () => context.go('/settlements/new'),
+          icon: const Icon(Icons.add),
+        ),
       ],
       body: Column(
         children: <Widget>[
