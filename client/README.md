@@ -1,10 +1,10 @@
 # CBizDocsManager Client
 
-Flutter 跨平台客户端，目标平台为 Android、Windows 和 Web，按 `features/<模块>/{domain,data,application,presentation}` 纵向切分。
+Flutter 跨平台客户端（Android / Windows / Web），按 `features/<模块>/{domain,data,application,presentation}` 纵向切分。
 
-已实现：认证状态、路由与三级守卫（登录态／改密态／权限）、网络统一信封与错误映射、原生 Drift 缓存、Outbox，以及**平台治理、邀请码、成员与权限、辅助字典、入库／出库单据、结算审批、结清视图与财务登记、报表看板与统计**各模块的数据层与页面。
+已实现：认证与路由守卫、网络信封与错误映射、Drift 缓存、Outbox，以及平台治理、邀请码、成员权限、辅助字典、单据、结算审批、财务登记与结清视图、报表各模块的页面。
 
-> ⚠️ **项目已被甲方搁置**（见根目录 [README](../README.md)）。功能链路已闭环，但**离线能力目前只覆盖成员与字典**，其余模块仍是在线读写；也未做过真机 UI 验收与打包发布。
+> ⚠️ 项目已被甲方搁置（见根目录 [README](../README.md)）；离线能力目前只覆盖成员与字典，也未做过真机 UI 验收与打包。
 
 ## 环境准备
 
