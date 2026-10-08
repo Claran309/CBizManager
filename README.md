@@ -4,7 +4,7 @@
 
 Golang后端 + Flutter & Dart客户端，可跑Andriod/Windows/Web
 
-需求和原型收到后，vibe 的一版MVP跑通整条业务链后从此再无下文，目前被搁置，暂废弃
+需求和原型收到后，跑通业务链后从此再无下文，目前被搁置，暂废弃，最近拉出来给Workbuddy鞭尸玩玩，Deepseek你自由了
 
 ![甲方回复：等等吧](docs/images/甲方回复-等等吧.jpg)
 
